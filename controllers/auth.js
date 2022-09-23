@@ -50,7 +50,7 @@ const login = async (req, res) => {
 
     // 1) check if email exists
     const user = await User.findOne({ email });
-    if (!user) 
+    if (!user)
       return res.status(400).json({
         success: false,
         message: 'No user found',
@@ -70,9 +70,10 @@ const login = async (req, res) => {
     const token = jwt.sign(
       { _id: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      // { expiresIn: '7d' }
+      { expiresIn: 60 }
     );
-    
+
     // 4) return user and token to client, exclude the password
     user.password = undefined;
     res.cookie('token', token, {
@@ -85,8 +86,8 @@ const login = async (req, res) => {
       data: user
     })
   }
-  catch(error) {
-    console.log(err);
+  catch (error) {
+    console.log(error);
     return res.status(400).json({
       success: false,
       message: 'Please try again',
@@ -95,4 +96,39 @@ const login = async (req, res) => {
   }
 }
 
-export { register, login }
+const logout = async (req, res) => {
+  try {
+    res.clearCookie('token');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logout success',
+      data: null
+    })
+  }
+  catch (error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Please try again',
+      data: null
+    })
+  }
+}
+
+const getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    console.log('CURRENT USER', user);
+    return res.status(200).json({
+      success: true,
+      message: 'Get current user successfully',
+      data: user
+    })
+  }
+  catch (error) {
+    console.log(error);
+  }
+}
+
+export { register, login, logout, getCurrentUser }
