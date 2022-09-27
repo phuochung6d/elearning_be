@@ -1,6 +1,17 @@
 import User from "../models/user";
-import { hashPassword, comparePassword } from "../auth/auth";
+import { hashPassword, comparePassword } from "../utils/auth";
 import jwt from 'jsonwebtoken';
+import aws from 'aws-sdk';
+import { nanoid } from 'nanoid'
+
+const awsConfig = {
+  accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_IAM_SECRET_ACCESS_KEY,
+  region: process.env.AWS_IAM_REGION,
+  apiVersion: process.env.AWS_IAM_SES_API_VERSION
+}
+
+const ses = new aws.SES(awsConfig);
 
 const register = async (req, res) => {
   try {
@@ -131,4 +142,126 @@ const getCurrentUser = async (req, res) => {
   }
 }
 
-export { register, login, logout, getCurrentUser }
+const requestResetPasswordCode = async (req, res) => {
+  const { email } = req.body;
+
+  // create nanoid
+  const resetCode = nanoid(6).toUpperCase();
+
+  // find & update resetCode of user
+  const user = await User.findOneAndUpdate(
+    { email },
+    { passwordResetCode: resetCode }
+  );
+  if (!user)
+    return res.status(204).json({
+      success: false,
+      message: 'No user found with this email',
+      data: null
+    });
+
+  // prepare email
+  try {
+    const emailParams = {
+      Source: process.env.EMAIL_FROM,
+      Destination: {
+        ToAddresses: [email]
+      },
+      ReplyToAddresses: [process.env.EMAIL_FROM],
+      Message: {
+        Subject: {
+          Charset: 'UTF-8',
+          Data: 'Password reset link'
+        },
+        Body: {
+          Html: {
+            Charset: 'UTF-8',
+            Data: `
+              <html>
+                <body>
+                  <h2>nextgoal</h2>
+                  <h1>Password Reset Link</h1>
+                  <p>Here is your CODE: ${resetCode}</p>
+                </body>
+              </html>
+            `
+          }
+        }
+      }
+    };
+
+    const sentEmail = ses.sendEmail(emailParams).promise();
+
+    sentEmail.then(data => {
+      return res.status(200).json({
+        success: true,
+        message: 'Sent email',
+        data: sentEmail
+      });
+    });
+    sentEmail.catch(error => {
+      console.log(error);
+      return res.status(200).json({
+        success: false,
+        message: 'Something wrong while doing sending mail',
+        data: null
+      });
+    })
+
+    // return res.status(200).json({
+    //   success: true,
+    //   message: 'Sent email',
+    //   data: 'aa'
+    // });
+  }
+  catch (error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Something went wrong',
+      data: null
+    });
+  }
+}
+
+const resetPassword = async (req, res) => {
+  const { email, code, newPassword } = req.body;
+  console.table({ email, code, newPassword });
+
+  try {
+    const hashedPass = await hashPassword(newPassword);
+
+    const user = await User.findOneAndUpdate(
+      { email, passwordResetCode: code },
+      {
+        passwordResetCode: '',
+        password: hashedPass
+      }
+    );
+    if (!user)
+      return res.status(204).json({
+        success: false,
+        message: 'Code is wrong',
+        data: null
+      });
+
+    user.password = undefined;
+    user.passwordResetCode = undefined;
+
+    return res.status(200).json({
+      success: true,
+      message: 'Reset password successfully',
+      data: user
+    })
+  }
+  catch (error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Something went wrong',
+      data: null
+    });
+  }
+}
+
+export { register, login, logout, getCurrentUser, requestResetPasswordCode, resetPassword }
