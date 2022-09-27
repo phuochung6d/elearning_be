@@ -39,6 +39,10 @@ const userSchema = new Schema(
     },
     createdAt: Number,
     updatedAt: Number,
+    passwordResetCode: {
+      type: String,
+      default: '',
+    },
     stripe_account_id: {},
     stripe_seller: {},
     stripeSession: {}
