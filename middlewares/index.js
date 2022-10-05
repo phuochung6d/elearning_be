@@ -1,31 +1,44 @@
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 dotenv.config();
+import chalk from 'chalk';
+import User from '../models/user';
 
-export const requireSignin = (req, res, next) => {
+const requireSignin = (req, res, next) => {
   try {
-    console.log('req token', req.headers.cookie.replace('token=', ''));
     const decoded = jwt.verify(req.headers.cookie.replace('token=', ''), process.env.JWT_SECRET);
-    console.log('decoded', decoded);
+    console.log(chalk.blueBright('middleware decoded'), decoded);
     req.user = decoded;
     next();
   }
-  catch(error) {
+  catch (error) {
     return res.status(401).json({
       success: false,
       message: 'Not authorized',
       data: null
     })
-    // return res.status(401).json(error);
   }
 }
 
-// import { expressjwt } from "express-jwt";
-// import dotenv from 'dotenv';
-// dotenv.config();
+const isInstructor = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || !user.role.includes('Instructor'))
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden route for not instructor role',
+        data: null
+      })
 
-// export const requireSignin = expressjwt({
-//   getToken: (req, res) => req.cookies.token,
-//   secret: process.env.JWT_SECRET,
-//   algorithms: ["HS256"],
-// });
+    next();
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+  }
+}
+
+export {
+  requireSignin,
+  isInstructor
+}
