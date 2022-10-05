@@ -81,8 +81,8 @@ const login = async (req, res) => {
     const token = jwt.sign(
       { _id: user._id },
       process.env.JWT_SECRET,
-      // { expiresIn: '7d' }
-      { expiresIn: 60 }
+      { expiresIn: '7d' }
+      // { expiresIn: 60 }
     );
 
     // 4) return user and token to client, exclude the password
@@ -139,6 +139,11 @@ const getCurrentUser = async (req, res) => {
   }
   catch (error) {
     console.log(error);
+    return res.status(403).json({
+      success: false,
+      message: 'Failed get current user',
+      data: null
+    })
   }
 }
 

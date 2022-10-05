@@ -3,8 +3,11 @@ import dotenv from 'dotenv';
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
-import authRouter from './routes/auth.js';
+import authRouter from './routes/auth';
+import instructorRouter from './routes/instructor';
+import courseRouter from './routes/course'
 
 dotenv.config({ path: process.env });
 
@@ -15,7 +18,8 @@ mongoose.connect(process.env.DATABASE)
   .catch(() => console.log('Connect to DB error'))
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
+app.use(cookieParser())
 app.use(morgan('dev'));
 
 // readdirSync('./routes').map(route => {
@@ -26,6 +30,8 @@ app.use(morgan('dev'));
 // });
 
 app.use('/api/auth', authRouter);
+app.use('/api/instructor', instructorRouter);
+app.use('/api/course', courseRouter);
 
 // app.listen(port, () => console.log(`Listening on port ${port}...!`))
 

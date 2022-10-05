@@ -34,8 +34,8 @@ const userSchema = new Schema(
     },
     role: {
       type: [String],
-      default: ['Subcriber'],
-      enum: ['Subcriber', 'Instructor', 'Admin']
+      default: ['Subscriber'],
+      enum: ['Subscriber', 'Instructor', 'Admin']
     },
     createdAt: Number,
     updatedAt: Number,
