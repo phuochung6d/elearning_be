@@ -1,6 +1,9 @@
 import aws from 'aws-sdk';
 import { nanoid } from 'nanoid';
 import chalk from 'chalk';
+import Course from '../models/course';
+import slugify from 'slugify';
+import { readFileSync } from "fs";
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
@@ -80,31 +83,351 @@ const removeImageController = async (req, res) => {
     //delete
     s3.deleteObject(imageParams, (error, data) => {
       if (error)
-          return res.status(400).json({
-            success: false,
-            message: error,
-            data: null
-          });
-
-        return res.status(200).json({
-          success: true,
-          message: 'Remove success',
-          data
+        return res.status(400).json({
+          success: false,
+          message: error,
+          data: null
         });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Remove success',
+        data
+      });
     });
   }
   catch (error) {
     console.log(chalk.red('errrror: '));
     console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete image fail, try again!',
+      data: null
+    });
   }
 }
 
 const createCourse = async (req, res) => {
   console.table(req.body);
+  try {
+    const alreadyExist = await Course.findOne({
+      slug: slugify(req.body.name.toLowerCase())
+    });
+    if (alreadyExist)
+      return res.status(409).json({
+        success: false,
+        message: 'Name of course is already taken in ous system',
+        data: null
+      });
+
+    const newCourse = new Course({
+      slug: slugify(req.body.name),
+      instructor: req.user._id,
+      ...req.body
+    })
+
+    await newCourse.save();
+
+    return res.status(201).json({
+      success: true,
+      message: 'Course created',
+      data: newCourse
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Create course fail, try again!',
+      data: null
+    });
+  }
+}
+
+const getInstructorCourses = async (req, res) => {
+  try {
+    const instructorCourses = await Course.find({ instructor: req.user._id });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get courses of instructor successfully',
+      data: instructorCourses
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail',
+      data: null
+    })
+  }
+}
+
+const getCourseBySlug = async (req, res) => {
+  try {
+    const course = await Course.findOne({ slug: req.params.slug }).populate({ path: 'instructor', select: 'name role' });
+    if (!course)
+      return res.status(204).json({
+        success: false,
+        message: 'No course found',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get course successfully',
+      data: course
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
+const uploadVideoHandler = async (req, res) => {
+  const { video } = req.files;
+
+  // prepare params for uploading video to s3
+  const params = {
+    Bucket: 'nextgoal-bucket',
+    Key: `${nanoid()}.${video.type.split('/')[1]}`,
+    Body: readFileSync(video.path),
+    ACL: 'public-read',
+    ContentType: video.type
+  }
+
+  //upload to s3
+  s3.upload(params, (error, data) => {
+    if (error) {
+      console.log(chalk.red('error: '));
+      console.log(error);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        data: null
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Upload video successfully',
+      data
+    })
+  })
+}
+
+const deleteVideoHandler = async (req, res) => {
+  try {
+    const { video_link } = req.body;
+    console.log('video_link: ', video_link);
+
+    // prepare video params
+    const videoParams = {
+      Bucket: video_link.Bucket,
+      Key: video_link.Key,
+    };
+
+    // delete from s3
+    s3.deleteObject(videoParams, (error, data) => {
+      if (error)
+        return res.status(400).json({
+          success: false,
+          message: error,
+          data: null
+        });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Remove success',
+        data
+      });
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete video fail, try again!',
+      data: null
+    })
+  }
+}
+
+const addLesson = async (req, res) => {
+  try {
+    const { title, content, video_link, free_preview } = req.body;
+    const { courseId } = req.params;
+
+    const updated = await Course.findOneAndUpdate(
+      { _id: courseId },
+      {
+        $push: {
+          lessons: { title, content, video_link, free_preview, slug: slugify(title) }
+        }
+      },
+      { new: true }
+    ).populate({ path: 'instructor', select: '_id name' });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Add lesson to course successfully',
+      data: updated
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
+const updateCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    console.log(chalk.blue('req.body'));
+    console.log(req.body);
+
+
+    const value = {};
+    ['name', 'slug', 'image', 'description', 'category', 'price', 'published'].forEach(item => {
+      if (Object.keys(req.body).includes(item))
+        value[`${item}`] = req.body[`${item}`];
+    });
+
+    const updated = await Course.findOneAndUpdate(
+      { _id: courseId },
+      value,
+      { new: true }
+    );
+    if (!updated)
+      return res.status(204).json({
+        success: false,
+        message: 'No course found with this slug',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update course successfully',
+      data: updated
+    })
+
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
+const deleteLesson = async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+
+    let course = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        $pull: {
+          lessons: { _id: lessonId }
+        }
+      }
+    );
+    if (!course)
+      return res.status(400).json({
+        success: false,
+        message: 'Not found lesson or course, try again!',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Delete lesson from course successfully!',
+      data: null
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete lesson fail, try again!',
+      data: null
+    })
+  }
+}
+
+const updateLesson = async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    const { title, content, video_link, free_preview } = req.body.lesson;
+    console.log(req.body);
+
+    const updated = await Course.updateOne(
+      { "lessons._id": lessonId },
+      {
+        $set: {
+          "lessons.$.title": title,
+          "lessons.$.slug": slugify(title),
+          "lessons.$.content": content,
+          "lessons.$.video_link": video_link,
+          "lessons.$.free_preview": free_preview,
+        }
+      }
+    );
+
+    if (!updated)
+      return res.status(400).json({
+        success: false,
+        message: 'No lesson found',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update lesson successfully',
+      data: updated
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete lesson fail, try again!',
+      data: null
+    })
+  }
 }
 
 export {
   uploadImageController,
   removeImageController,
   createCourse,
+  getInstructorCourses,
+  getCourseBySlug,
+  uploadVideoHandler,
+  deleteVideoHandler,
+  addLesson,
+  updateCourse,
+  deleteLesson,
+  updateLesson,
 }
