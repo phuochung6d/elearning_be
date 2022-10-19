@@ -20,6 +20,7 @@
     "dotenv": "^16.0.2",
     "esm": "^3.2.25",
     "express": "^4.18.1",
+    "express-formidable": "^1.2.0",
     "express-jwt": "^7.7.5",
     "jsonwebtoken": "^8.5.1",
     "mongoose": "^6.5.5",
@@ -27,6 +28,7 @@
     "nanoid": "^4.0.0",
     "nodemon": "^2.0.19",
     "query-string": "^7.1.1",
+    "slugify": "^1.6.5",
     "stripe": "^10.12.0",
     "uuid": "^9.0.0"
   },

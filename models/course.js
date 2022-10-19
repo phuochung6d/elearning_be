@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
-import { ObjectId } from mongoose.Schema;
+import { v4 as uuidv4 } from 'uuid';
+import dayjs from "dayjs";
+
+const { ObjectId } = mongoose.Schema;
 
 const lessonSchema = new mongoose.Schema(
   {
@@ -24,10 +27,12 @@ const lessonSchema = new mongoose.Schema(
       minLength: 200,
     },
     video_link: {},
-    pre_preview: {
+    free_preview: {
       type: Boolean,
       default: false
-    }
+    },
+    createdAt: Number,
+    updatedAt: Number,
   },
   {
     timestamps: {
@@ -40,6 +45,11 @@ const lessonSchema = new mongoose.Schema(
 
 const courseSchema = new mongoose.Schema(
   {
+    _id: {
+      type: String,
+      required: true,
+      default: uuidv4
+    },
     name: {
       type: String,
       trim: true,
@@ -67,7 +77,7 @@ const courseSchema = new mongoose.Schema(
       default: true,
     },
     instructor: {
-      type: ObjectId,
+      type: String,
       ref: "User",
       required: true,
     },
@@ -76,6 +86,8 @@ const courseSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    createdAt: Number,
+    updatedAt: Number,
   },
   {
     timestamps: {
