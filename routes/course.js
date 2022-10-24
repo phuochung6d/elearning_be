@@ -7,7 +7,9 @@ import {
   createCourse,
   updateCourse,
   getInstructorCourses,
+  getPublishedCourses,
   getCourseBySlug,
+  getPublicCourseBySlug,
   uploadVideoHandler,
   deleteVideoHandler,
   addLesson,
@@ -25,7 +27,9 @@ router.post('/remove-image', requireSignin, removeImageController);
 router.post('/', requireSignin, isInstructor, createCourse);
 router.put('/:courseId', requireSignin, isInstructor, updateCourse);
 router.get('/instructor-courses', requireSignin, isInstructor, getInstructorCourses);
+router.get('/public', getPublishedCourses);
 router.get('/:slug', requireSignin, isInstructor, getCourseBySlug);
+router.get('/public/:slug', getPublicCourseBySlug);
 router.post('/upload-video/:instructorId', requireSignin, isInstructor, isCurrentInstructor, formidable(), uploadVideoHandler);
 router.post('/delete-video/:instructorId', requireSignin, isInstructor, isCurrentInstructor, deleteVideoHandler);
 router.post('/:courseId/lesson', requireSignin, isInstructor, isCurrentInstructor, addLesson);

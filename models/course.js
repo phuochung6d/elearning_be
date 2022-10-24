@@ -27,6 +27,10 @@ const lessonSchema = new mongoose.Schema(
       minLength: 200,
     },
     video_link: {},
+    duration: {
+      type: Number,
+      default: 0
+    },
     free_preview: {
       type: Boolean,
       default: false
@@ -50,6 +54,9 @@ const courseSchema = new mongoose.Schema(
       required: true,
       default: uuidv4
     },
+    requirements: {
+      type: [String]
+    },
     name: {
       type: String,
       trim: true,
@@ -61,13 +68,22 @@ const courseSchema = new mongoose.Schema(
       type: String,
       lowercase: true,
     },
+    summary: {
+      type: String,
+      maxLength: 400,
+    },
+    goal: {
+      type: [String]
+    },
     description: {
       type: {},
       minlength: 200,
       required: true,
     },
     image: {},
-    category: String,
+    category: {
+      type: [String]
+    },
     price: {
       type: Number,
       default: 9.99,
@@ -85,6 +101,10 @@ const courseSchema = new mongoose.Schema(
     published: {
       type: Boolean,
       default: false,
+    },
+    languages: {
+      type: [String],
+      required: true
     },
     createdAt: Number,
     updatedAt: Number,

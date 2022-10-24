@@ -166,9 +166,69 @@ const getInstructorCourses = async (req, res) => {
   }
 }
 
+const getPublishedCourses = async (req, res) => {
+  try {
+    const filters = {};
+    filters['published'] = true;
+    if (req.query.paid) filters['paid'] = req.query.paid === 'true';
+    if (req.query.category) filters['category'] = req.query.category;
+    const courses = await Course
+      .find(filters)
+      .select('category summary goal requirements languages description name paid price slug image lessons updatedAt')
+      .populate({ path: 'instructor', select: 'name' });
+
+    console.log(courses);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get public course successfully',
+      data: courses
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail',
+      data: null
+    })
+  }
+}
+
 const getCourseBySlug = async (req, res) => {
   try {
     const course = await Course.findOne({ slug: req.params.slug }).populate({ path: 'instructor', select: 'name role' });
+    if (!course)
+      return res.status(204).json({
+        success: false,
+        message: 'No course found',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get course successfully',
+      data: course
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
+const getPublicCourseBySlug = async (req, res) => {
+  try {
+    const course = await Course
+      .findOne({ slug: req.params.slug })
+      .populate({ path: 'instructor', select: 'name role' })
+      .select('name summary goal requirements languages slug description image category price paid updatedAt lessons');
     if (!course)
       return res.status(204).json({
         success: false,
@@ -265,14 +325,14 @@ const deleteVideoHandler = async (req, res) => {
 
 const addLesson = async (req, res) => {
   try {
-    const { title, content, video_link, free_preview } = req.body;
+    const { title, content, video_link, free_preview, duration } = req.body;
     const { courseId } = req.params;
 
     const updated = await Course.findOneAndUpdate(
       { _id: courseId },
       {
         $push: {
-          lessons: { title, content, video_link, free_preview, slug: slugify(title) }
+          lessons: { title, content, video_link, free_preview, duration, slug: slugify(title) }
         }
       },
       { new: true }
@@ -304,10 +364,11 @@ const updateCourse = async (req, res) => {
 
 
     const value = {};
-    ['name', 'slug', 'image', 'description', 'category', 'price', 'published'].forEach(item => {
-      if (Object.keys(req.body).includes(item))
-        value[`${item}`] = req.body[`${item}`];
-    });
+    ['name', 'summary', 'slug', 'image', 'description', 'category', 'price', 'published', 'requirements', 'goal', 'languages']
+      .forEach(item => {
+        if (Object.keys(req.body).includes(item))
+          value[`${item}`] = req.body[`${item}`];
+      });
 
     const updated = await Course.findOneAndUpdate(
       { _id: courseId },
@@ -378,7 +439,7 @@ const deleteLesson = async (req, res) => {
 const updateLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
-    const { title, content, video_link, free_preview } = req.body.lesson;
+    const { title, content, duration, video_link, free_preview } = req.body.lesson;
     console.log(req.body);
 
     const updated = await Course.updateOne(
@@ -388,6 +449,7 @@ const updateLesson = async (req, res) => {
           "lessons.$.title": title,
           "lessons.$.slug": slugify(title),
           "lessons.$.content": content,
+          "lessons.$.duration": duration,
           "lessons.$.video_link": video_link,
           "lessons.$.free_preview": free_preview,
         }
@@ -423,7 +485,9 @@ export {
   removeImageController,
   createCourse,
   getInstructorCourses,
+  getPublishedCourses,
   getCourseBySlug,
+  getPublicCourseBySlug,
   uploadVideoHandler,
   deleteVideoHandler,
   addLesson,
