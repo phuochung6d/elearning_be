@@ -4,6 +4,41 @@ import dayjs from "dayjs";
 
 const { ObjectId } = mongoose.Schema;
 
+const quizSchema = new mongoose.Schema(
+  {
+    _id: {
+      type: String,
+      required: true,
+      default: uuidv4
+    },
+    lesson: {
+      type: String,
+      ref: 'lessons',  // wrong because not have Lesson model yet
+      required: true
+    },
+    question: {
+      type: String,
+      required: true
+    },
+    answer: [{
+      type: Object,
+      required: true
+    }],
+    correctAnswer: [{
+      type: Object
+    }],
+    createdAt: Number,
+    updatedAt: Number,
+  },
+  {
+    timestamps: {
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
+      currentTime: () => dayjs().valueOf()
+    }
+  }
+);
+
 const lessonSchema = new mongoose.Schema(
   {
     _id: {
@@ -34,6 +69,39 @@ const lessonSchema = new mongoose.Schema(
     free_preview: {
       type: Boolean,
       default: false
+    },
+    index: Number,
+    section: {
+      type: String,
+      ref: 'sections',  // wrong because not have Section model yet
+      required: true,
+    },
+    createdAt: Number,
+    updatedAt: Number,
+  },
+  {
+    timestamps: {
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
+      currentTime: () => dayjs().valueOf()
+    }
+  }
+);
+
+const sectionSchema = new mongoose.Schema(
+  {
+    _id: {
+      type: String,
+      required: true,
+      default: uuidv4
+    },
+    index: {
+      type: Number,
+      default: 0,
+    },
+    name: {
+      type: String,
+      default: 'Default name of first section'
     },
     createdAt: Number,
     updatedAt: Number,
@@ -76,7 +144,7 @@ const courseSchema = new mongoose.Schema(
       type: [String]
     },
     description: {
-      type: {},
+      type: String,
       minlength: 200,
       required: true,
     },
@@ -97,7 +165,9 @@ const courseSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    sections: [sectionSchema],
     lessons: [lessonSchema],
+    quizzes: [quizSchema],
     published: {
       type: Boolean,
       default: false,

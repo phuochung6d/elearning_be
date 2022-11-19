@@ -43,6 +43,11 @@ const userSchema = new Schema(
       type: String,
       default: '',
     },
+    courses: [{
+      _id: false,
+      courseId: { type: String, ref: 'Course' },
+      completedLessons: { type: [String] }
+    }],
     stripe_account_id: {},
     stripe_seller: {},
     stripeSession: {}

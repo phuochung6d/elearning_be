@@ -7,7 +7,8 @@ import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import authRouter from './routes/auth';
 import instructorRouter from './routes/instructor';
-import courseRouter from './routes/course'
+import userRouter from './routes/user';
+import courseRouter from './routes/course';
 
 dotenv.config({ path: process.env });
 
@@ -31,6 +32,7 @@ app.use(morgan('dev'));
 
 app.use('/api/auth', authRouter);
 app.use('/api/instructor', instructorRouter);
+app.use('/api/user', userRouter);
 app.use('/api/course', courseRouter);
 
 // app.listen(port, () => console.log(`Listening on port ${port}...!`))
