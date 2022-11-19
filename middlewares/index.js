@@ -3,11 +3,18 @@ import dotenv from 'dotenv';
 dotenv.config();
 import chalk from 'chalk';
 import User from '../models/user';
+import Course from '../models/course';
 
 const requireSignin = (req, res, next) => {
   try {
-    const decoded = jwt.verify(req.headers.cookie.replace('token=', ''), process.env.JWT_SECRET);
-    // console.log(chalk.blueBright('middleware decoded'), decoded);
+    const arrayCookie = req.headers.cookie.split(' ');
+    let cookie = '';
+    arrayCookie.forEach(item => {if (item.indexOf('token') >= 0) cookie =  item});
+    const decoded = jwt.verify(
+      cookie.replace('token=', '').replace(';', ''), 
+      process.env.JWT_SECRET
+    );
+    // console.log(chalk.blue('middleware decoded'), decoded);
     req.user = decoded;
     next();
   }
@@ -37,7 +44,7 @@ const isInstructor = async (req, res, next) => {
     console.log(error);
     return res.status(401).json({
       success: false,
-      message: 'Not authorized',
+      message: 'Not instructor',
       data: null
     })
   }
@@ -48,12 +55,44 @@ const isCurrentInstructor = (req, res, next) => {
     if (req.user._id !== req.params.instructorId && req.user._id !== req.body.instructorId)
       return res.status(401).json({
         success: false,
-        messagE: 'Unauthorized',
+        message: 'Not current instructor',
         data: null
       });
     next();
   }
   catch(error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(401).json({
+      success: false,
+      message: 'Not current instructor',
+      data: null
+    })
+  }
+}
+
+const isEnrolled = async (req, res, next) => {
+  try {
+    const { slug, courseId } = req.params;
+    const { _id: idUser } = req.user;
+
+    const course = await Course.findOne(slug ? { slug } : { _id: courseId });
+
+    const user = await User.findById({ _id: idUser });
+
+    // console.log(chalk.blue('course: '), course);
+    // console.log(chalk.blue('user: '), user);
+
+    if (user.courses.findIndex(item => item.courseId === course._id) === -1)
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized',
+        data: null
+      })
+
+    next();
+  }
+  catch (error) {
     console.log(chalk.red('error: '));
     console.log(error);
     return res.status(401).json({
@@ -67,5 +106,6 @@ const isCurrentInstructor = (req, res, next) => {
 export {
   requireSignin,
   isInstructor,
-  isCurrentInstructor
+  isCurrentInstructor,
+  isEnrolled,
 }

@@ -107,65 +107,6 @@ const removeImageController = async (req, res) => {
   }
 }
 
-const createCourse = async (req, res) => {
-  console.table(req.body);
-  try {
-    const alreadyExist = await Course.findOne({
-      slug: slugify(req.body.name.toLowerCase())
-    });
-    if (alreadyExist)
-      return res.status(409).json({
-        success: false,
-        message: 'Name of course is already taken in ous system',
-        data: null
-      });
-
-    const newCourse = new Course({
-      slug: slugify(req.body.name),
-      instructor: req.user._id,
-      ...req.body
-    })
-
-    await newCourse.save();
-
-    return res.status(201).json({
-      success: true,
-      message: 'Course created',
-      data: newCourse
-    })
-  }
-  catch (error) {
-    console.log(chalk.red('error: '));
-    console.log(error);
-    return res.status(400).json({
-      success: false,
-      message: 'Create course fail, try again!',
-      data: null
-    });
-  }
-}
-
-const getInstructorCourses = async (req, res) => {
-  try {
-    const instructorCourses = await Course.find({ instructor: req.user._id });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Get courses of instructor successfully',
-      data: instructorCourses
-    })
-  }
-  catch (error) {
-    console.log(chalk.red('error: '));
-    console.log(error);
-    return res.status(400).json({
-      success: false,
-      message: 'Get course fail',
-      data: null
-    })
-  }
-}
-
 const getPublishedCourses = async (req, res) => {
   try {
     const filters = {};
@@ -176,8 +117,6 @@ const getPublishedCourses = async (req, res) => {
       .find(filters)
       .select('category summary goal requirements languages description name paid price slug image lessons updatedAt')
       .populate({ path: 'instructor', select: 'name' });
-
-    console.log(courses);
 
     return res.status(200).json({
       success: true,
@@ -196,34 +135,10 @@ const getPublishedCourses = async (req, res) => {
   }
 }
 
-const getCourseBySlug = async (req, res) => {
-  try {
-    const course = await Course.findOne({ slug: req.params.slug }).populate({ path: 'instructor', select: 'name role' });
-    if (!course)
-      return res.status(204).json({
-        success: false,
-        message: 'No course found',
-        data: null
-      });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Get course successfully',
-      data: course
-    })
-  }
-  catch (error) {
-    console.log(chalk.red('error: '));
-    console.log(error);
-    return res.status(400).json({
-      success: false,
-      message: 'Get course fail, try again!',
-      data: null
-    })
-  }
-}
-
 const getPublicCourseBySlug = async (req, res) => {
+  if (!req.query.date)
+    req.query.data = Date.now();
+
   try {
     const course = await Course
       .findOne({ slug: req.params.slug })
@@ -232,13 +147,13 @@ const getPublicCourseBySlug = async (req, res) => {
     if (!course)
       return res.status(204).json({
         success: false,
-        message: 'No course found',
+        message: `No course found. Time: ${req.query.date}`,
         data: null
       });
 
     return res.status(200).json({
       success: true,
-      message: 'Get course successfully',
+      message: `Get course successfully. Time: ${req.query.date}`,
       data: course
     })
   }
@@ -247,7 +162,35 @@ const getPublicCourseBySlug = async (req, res) => {
     console.log(error);
     return res.status(400).json({
       success: false,
-      message: 'Get course fail, try again!',
+      message: `Get course fail, try again! Time: ${req.query.date}`,
+      data: null
+    })
+  }
+}
+
+const getPublicCourseById = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.courseId);
+
+    if (!course)
+      return res.status(400).json({
+        success: false,
+        message: 'No course found with this id',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get course by id successfully',
+      data: course
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Get course fail, try again! Time: ${req.query.date}`,
       data: null
     })
   }
@@ -288,6 +231,7 @@ const uploadVideoHandler = async (req, res) => {
 const deleteVideoHandler = async (req, res) => {
   try {
     const { video_link } = req.body;
+
     console.log('video_link: ', video_link);
 
     // prepare video params
@@ -323,35 +267,47 @@ const deleteVideoHandler = async (req, res) => {
   }
 }
 
-const addLesson = async (req, res) => {
+const createCourse = async (req, res) => {
   try {
-    const { title, content, video_link, free_preview, duration } = req.body;
-    const { courseId } = req.params;
+    if (!req.body.name)
+      return res.status(400).json({
+        success: false,
+        message: 'Please fill complelely information of course',
+        data: null
+      })
 
-    const updated = await Course.findOneAndUpdate(
-      { _id: courseId },
-      {
-        $push: {
-          lessons: { title, content, video_link, free_preview, duration, slug: slugify(title) }
-        }
-      },
-      { new: true }
-    ).populate({ path: 'instructor', select: '_id name' });
+    const alreadyExist = await Course.findOne({
+      slug: slugify(req.body.name.toLowerCase())
+    });
+    if (alreadyExist)
+      return res.status(409).json({
+        success: false,
+        message: 'Name of course is already taken in ous system',
+        data: null
+      });
+
+    const newCourse = new Course({
+      slug: slugify(req.body.name),
+      instructor: req.user._id,
+      ...req.body
+    })
+
+    await newCourse.save();
 
     return res.status(201).json({
       success: true,
-      message: 'Add lesson to course successfully',
-      data: updated
-    });
+      message: 'Course created',
+      data: newCourse
+    })
   }
   catch (error) {
     console.log(chalk.red('error: '));
     console.log(error);
     return res.status(400).json({
       success: false,
-      message: 'Get course fail, try again!',
+      message: 'Create course fail, try again!',
       data: null
-    })
+    });
   }
 }
 
@@ -359,12 +315,8 @@ const updateCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
 
-    console.log(chalk.blue('req.body'));
-    console.log(req.body);
-
-
     const value = {};
-    ['name', 'summary', 'slug', 'image', 'description', 'category', 'price', 'published', 'requirements', 'goal', 'languages']
+    ['name', 'summary', 'slug', 'image', 'description', 'category', 'paid', 'price', 'published', 'requirements', 'goal', 'languages']
       .forEach(item => {
         if (Object.keys(req.body).includes(item))
           value[`${item}`] = req.body[`${item}`];
@@ -400,6 +352,286 @@ const updateCourse = async (req, res) => {
   }
 }
 
+const getInstructorCourses = async (req, res) => {
+  try {
+    const instructorCourses = await Course
+      .find({ instructor: req.user._id });
+
+    let _instructorCourses = JSON.parse(JSON.stringify(instructorCourses));
+
+    instructorCourses?.forEach((course, index_course) => {
+      course?.lessons?.forEach((lesson, index_lesson) => {
+        const found = course?.sections?.find(section => section._id === lesson.section);
+        _instructorCourses[index_course].lessons[index_lesson].section = found ? found : lesson?.section
+      })
+    })
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get courses of instructor successfully',
+      data: _instructorCourses
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail',
+      data: null
+    })
+  }
+}
+
+const getCourseBySlug = async (req, res) => {
+  try {
+    const course = await Course
+      .findOne({ slug: req.params.slug })
+      .populate({ path: 'instructor', select: 'name role' });
+
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
+    if (!course)
+      return res.status(204).json({
+        success: false,
+        message: 'No course found',
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get course successfully',
+      data: _course
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
+const addSection = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { index, name } = req.body;
+
+    const duplicated = await Course.findOne({
+      _id: courseId,
+      sections: {
+        $elemMatch: {
+          index
+        }
+      }
+    });
+
+    if (duplicated)
+      return res.status(400).json({
+        success: false,
+        message: 'Exist current section index in this course',
+        data: null
+      });
+
+    const updatedCourse = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        $addToSet: {
+          sections: {
+            index,
+            name
+          }
+        }
+      },
+      { new: true }
+    );
+
+    const _updatedCourse = JSON.parse(JSON.stringify(updatedCourse));
+    updatedCourse.lessons.forEach((lesson, index) => {
+      const found = updatedCourse.sections.find(section => section._id === lesson.section);
+      _updatedCourse.lessons[index].section = found ? found : lesson.section;
+    })
+
+    return res.status(201).json({
+      success: true,
+      message: 'Add section successfully',
+      data: _updatedCourse
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Add section fail, try again!',
+      data: null
+    })
+  }
+}
+
+const deleteSection = async (req, res) => {
+  try {
+    const { courseId, sectionId } = req.params;
+
+    console.log('sectionId: ', sectionId);
+
+    const check = await Course.findOne({
+      _id: courseId,
+      'lessons.section': sectionId
+    });
+
+    // check if that section contains at least one lesson, don't allow to delete
+    if (check)
+      return res.status(400).json({
+        success: false,
+        message: `This section is containing at least 1 lesson, make sure there's no lesson and try again`,
+        data: null
+      });
+
+    const updatedCourse = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        $pull: {
+          sections: {
+            _id: sectionId
+          }
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    const _updatedCourse = JSON.parse(JSON.stringify(updatedCourse));
+    updatedCourse.lessons.forEach((lesson, index) => {
+      const found = updatedCourse.sections.find(section => section._id === lesson.section);
+      _updatedCourse.lessons[index].section = found ? found : lesson.section;
+    })
+
+    return res.status(200).json({
+      success: true,
+      message: 'Delete section successfully',
+      data: _updatedCourse
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete section fail, try again!',
+      data: null
+    })
+  }
+}
+
+const updateSection = async (req, res) => {
+  try {
+    const { courseId, sectionId } = req.params;
+    const { index, name, sameIndexAcceptable } = req.body;
+
+    if (!sameIndexAcceptable) {
+      const duplicated = await Course.findOne({
+        _id: courseId,
+        sections: {
+          $elemMatch: {
+            index
+          }
+        }
+      });
+
+      if (duplicated)
+        return res.status(400).json({
+          success: false,
+          message: 'Exist current section index in this course',
+          data: null
+        });
+    }
+
+    const courseUpdated = await Course.findOneAndUpdate(
+      {
+        _id: courseId,
+        'sections._id': sectionId
+      },
+      {
+        $set: {
+          'sections.$.index': index,
+          'sections.$.name': name
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    const _courseUpdated = JSON.parse(JSON.stringify(courseUpdated));
+    courseUpdated.lessons.forEach((lesson, index) => {
+      const found = courseUpdated.sections.find(section => section._id === lesson.section);
+      _courseUpdated.lessons[index].section = found ? found : lesson.section;
+    })
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update section successfully',
+      data: _courseUpdated
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Update section fail, try again!',
+      data: null
+    })
+  }
+}
+
+const addLesson = async (req, res) => {
+  try {
+    const { index, section, title, content, video_link, free_preview, duration } = req.body;
+    const { courseId } = req.params;
+
+    const updated = await Course.findOneAndUpdate(
+      { _id: courseId },
+      {
+        $push: {
+          lessons: { index, section, title, content, video_link, free_preview, duration, slug: slugify(title) }
+        }
+      },
+      { new: true }
+    ).populate({ path: 'instructor', select: '_id name' });
+
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated.lessons.forEach((lesson, index) => {
+      const found = updated.sections.find(section => section._id === lesson.section);
+      _updated.lessons[index].section = found ? found : lesson.section
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Add lesson to course successfully',
+      data: _updated
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get course fail, try again!',
+      data: null
+    })
+  }
+}
+
 const deleteLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
@@ -410,7 +642,8 @@ const deleteLesson = async (req, res) => {
         $pull: {
           lessons: { _id: lessonId }
         }
-      }
+      },
+      { new: true }
     );
     if (!course)
       return res.status(400).json({
@@ -419,10 +652,16 @@ const deleteLesson = async (req, res) => {
         data: null
       });
 
+    const _updated = JSON.parse(JSON.stringify(course));
+    course.lessons.forEach((lesson, index) => {
+      const found = course.sections.find(section => section._id === lesson.section);
+      _updated.lessons[index].section = found ? found : lesson.section
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Delete lesson from course successfully!',
-      data: null
+      data: _updated
     })
   }
   catch (error) {
@@ -439,10 +678,9 @@ const deleteLesson = async (req, res) => {
 const updateLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
-    const { title, content, duration, video_link, free_preview } = req.body.lesson;
-    console.log(req.body);
+    const { index, section, title, content, duration, video_link, free_preview } = req.body.lesson;
 
-    const updated = await Course.updateOne(
+    const updated = await Course.findOneAndUpdate(
       { "lessons._id": lessonId },
       {
         $set: {
@@ -452,8 +690,11 @@ const updateLesson = async (req, res) => {
           "lessons.$.duration": duration,
           "lessons.$.video_link": video_link,
           "lessons.$.free_preview": free_preview,
+          "lessons.$.index": index,
+          "lessons.$.section": section
         }
-      }
+      },
+      { new: true }
     );
 
     if (!updated)
@@ -463,10 +704,16 @@ const updateLesson = async (req, res) => {
         data: null
       });
 
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated?.lessons?.forEach((lesson, index) => {
+      const found = updated?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = found ? found : lesson?.section
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Update lesson successfully',
-      data: updated
+      data: _updated
     })
   }
   catch (error) {
@@ -480,18 +727,161 @@ const updateLesson = async (req, res) => {
   }
 }
 
+const addQuiz = async (req, res) => {
+  try {
+    console.log(chalk.blue('req.body: '), req.body);
+    const { courseId, lessonId } = req.params;
+    const { question, answer, correctAnswer } = req.body.quiz;
+
+    const checkExist = await Course.findOne({
+      _id: courseId,
+      'quizzes.lesson': lessonId
+    });
+
+    if (checkExist)
+      return res.status(400).json({
+        success: false,
+        message: 'Current lesson has already had quiz, try updating or deleting instead',
+        data: null
+      });
+
+    const updatedCourse = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        $push: {
+          quizzes: { lesson: lessonId, question, answer, correctAnswer }
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    const _updated = JSON.parse(JSON.stringify(updatedCourse));
+    updatedCourse?.lessons?.forEach((lesson, index) => {
+      const sectionFound = updatedCourse?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = sectionFound ? sectionFound : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Add quiz successfully',
+      data: _updated
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Add quiz fail, try again!',
+      data: null
+    })
+  }
+}
+
+const deleteQuiz = async (req, res) => {
+  try {
+    const { courseId, lessonId, quizId } = req.params;
+
+    let course = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        $pull: {
+          quizzes: { _id: quizId }
+        }
+      },
+      { new: true }
+    );
+    if (!course)
+      return res.status(400).json({
+        success: false,
+        message: 'Not found lesson or course, try again!',
+        data: null
+      });
+
+    const _updated = JSON.parse(JSON.stringify(course));
+    course.lessons.forEach((lesson, index) => {
+      const found = course.sections.find(section => section._id === lesson.section);
+      _updated.lessons[index].section = found ? found : lesson.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Delete lesson from course successfully!',
+      data: _updated
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete quiz fail, try again!',
+      data: null
+    })
+  }
+}
+
+const updateQuiz = async (req, res) => {
+  try {
+    const { courseId, lessonId, quizId } = req.params;
+    const { question, answer, correctAnswer } = req.body.quiz;
+
+    const updated = await Course.findOneAndUpdate(
+      { "quizzes._id": quizId },
+      {
+        $set: {
+          "quizzes.$.question": question,
+          "quizzes.$.answer": answer,
+          "quizzes.$.correctAnswer": correctAnswer,
+        }
+      },
+      { new: true }
+    );
+
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated?.lessons?.forEach((lesson, index) => {
+      const found = updated?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update lesson successfully',
+      data: _updated
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Update quiz fail, try again!',
+      data: null
+    })
+  }
+}
+
 export {
   uploadImageController,
   removeImageController,
-  createCourse,
-  getInstructorCourses,
   getPublishedCourses,
-  getCourseBySlug,
   getPublicCourseBySlug,
+  getPublicCourseById,
   uploadVideoHandler,
   deleteVideoHandler,
-  addLesson,
+  createCourse,
   updateCourse,
+  getInstructorCourses,
+  getCourseBySlug,
+  addSection,
+  deleteSection,
+  updateSection,
+  addLesson,
   deleteLesson,
   updateLesson,
+  addQuiz,
+  deleteQuiz,
+  updateQuiz,
 }
