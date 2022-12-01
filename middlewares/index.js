@@ -50,6 +50,27 @@ const isInstructor = async (req, res, next) => {
   }
 }
 
+const verifyRole = (...roles) => {
+  return async (req, res, next) => {
+    const user = await User.findById(req.user._id);
+    if (!roles.includes(user.role))
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden route for this role',
+        data: null
+      });
+
+    next();
+  }
+}
+
+const isCurrentUserWithRole = (...roles) => {
+  return async (req, res, next) => {
+    const user = await User.findById(req.user._id);
+    
+  }
+}
+
 const isCurrentInstructor = (req, res, next) => {
   try {
     if (req.user._id !== req.params.instructorId && req.user._id !== req.body.instructorId)
@@ -106,6 +127,7 @@ const isEnrolled = async (req, res, next) => {
 export {
   requireSignin,
   isInstructor,
+  verifyRole,
   isCurrentInstructor,
   isEnrolled,
 }

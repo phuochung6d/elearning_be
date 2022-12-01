@@ -62,7 +62,8 @@ const freeEnrollmentController = async (req, res) => {
         $addToSet: {
           courses: {
             courseId: courseId,
-            completedLessons: []
+            completedLessons: [],
+            completedQuizzes: [],
           }
         },
       },
@@ -172,7 +173,8 @@ const stripeSuccessRequest = async (req, res) => {
       user.courses.findIndex(course => course._id === courseId) < 0
         && user.courses.push({
           courseId: courseId,
-          completedLessons: []
+          completedLessons: [],
+          completedQuizzes: [],
         });
       user.stripeSession = {};
 
@@ -217,6 +219,14 @@ const getEnrolledCourses = async (req, res) => {
         }
       });
 
+    let _instructorCourses = JSON.parse(JSON.stringify(enrolledCourses.courses));
+    enrolledCourses?.courses?.forEach((course, index_course) => {
+      course?.lessons?.forEach((lesson, index_lesson) => {
+        const found = course?.sections?.find(section => section._id === lesson.section);
+        _instructorCourses[index_course].lessons[index_lesson].section = found ? found : lesson?.section
+      })
+    })
+
     return res.status(200).json({
       success: true,
       message: 'Get enrolled courses successfully',
@@ -249,10 +259,16 @@ const getEnrolledCourseBySlug = async (req, res) => {
         data: null,
       });
 
+    const _course = JSON.parse(JSON.stringify(course));
+    course.lessons.forEach((lesson, index) => {
+      const found = course.sections.find(section => section._id === lesson.section);
+      _course.lessons[index].section = found ? found : lesson.section;
+    })
+
     return res.status(200).json({
       success: true,
       message: 'Get detail of enrolled course successfully!',
-      data: course,
+      data: _course,
     })
   }
   catch (error) {
@@ -319,30 +335,30 @@ const markLessonIncompleted = async (req, res) => {
 
     const index = user.courses.findIndex(item => item.courseId === courseId);
 
-    if (index >= 0) {
-      if (user.courses[index].completedLessons.includes(lessonId)) {
-        const temp = user.courses[index].completedLessons.filter(id => id !== lessonId);
-        user.courses[index].completedLessons = temp;
-        await user.save();
+    if (user.courses[index].completedLessons.includes(lessonId)) {
+      const course = await Course.findById(courseId);
+      const quizOfLesson = course.quizzes.find(quiz => quiz.lesson === lessonId);
+      console.log('quizOfLesson: ', quizOfLesson);
 
-        return res.status(200).json({
-          success: true,
-          message: 'Mark lesson incomplete successfully',
-          data: user
-        })
-      }
-      else {
-        return res.status(200).json({
-          success: true,
-          message: `This lesson hasn't already completed actually`,
-          data: user
-        })
-      }
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: `Current user hasn't enrolled to this course yet`,
-        data: null
+      const tempCompletedLessons = user.courses[index].completedLessons.filter(_lessonId => _lessonId !== lessonId);
+      const tempCompletedQuizzes = user.courses[index].completedQuizzes.filter(quizId => quizId !== quizOfLesson._id);
+
+      user.courses[index].completedLessons = tempCompletedLessons;
+      user.courses[index].completedQuizzes = tempCompletedQuizzes;
+
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Mark lesson incomplete successfully',
+        data: user
+      })
+    }
+    else {
+      return res.status(200).json({
+        success: true,
+        message: `This lesson hasn't already completed actually`,
+        data: user
       })
     }
   }
@@ -357,6 +373,55 @@ const markLessonIncompleted = async (req, res) => {
   }
 }
 
+const submitQuiz = async (req, res, next) => {
+  try {
+    const { courseId, quizId } = req.params;
+    const { index } = req.body.quiz;
+
+    const course = await Course.findById(courseId);
+    const quizInfo = course.quizzes.find(quiz => quiz._id === quizId);
+
+    const correctAnswer = quizInfo.correctAnswer.find(_ => _.value === true).index;
+    if (+index === +correctAnswer) {
+      const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+      const index = user.courses.findIndex(item => item.courseId === courseId);
+      if (!user.courses[index].completedQuizzes.includes(quizId))
+        user.courses[index].completedQuizzes.push(quizId);
+
+      await user.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'You answered correctly',
+        data: user
+      });
+    }
+    else {
+      const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+      const index = user.courses.findIndex(item => item.courseId === courseId);
+      if (user.courses[index].completedQuizzes.includes(quizId)) {
+        user.courses[index].completedQuizzes = user.courses[index].completedQuizzes.filter(id => id !== quizId);
+        await user.save();
+      }
+
+      return res.status(200).json({
+        success: false,
+        message: 'You answered this question incorrectly',
+        data: user
+      });
+    }
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Submit quiz fail, try again! Detail: ${error.message}`,
+      data: null
+    })
+  }
+}
+
 export {
   freeEnrollmentController,
   paidEnrollmentController,
@@ -366,4 +431,5 @@ export {
   getEnrolledCourseBySlug,
   markLessonCompleted,
   markLessonIncompleted,
+  submitQuiz,
 }

@@ -14,6 +14,7 @@ import {
   getEnrolledCourseBySlug,
   markLessonCompleted,
   markLessonIncompleted,
+  submitQuiz,
 } from '../controllers/user';
 
 const router = express.Router();
@@ -45,5 +46,8 @@ router.post(
   isEnrolled,
   markLessonIncompleted
 );
+
+// answer quiz
+router.post('/quiz-answer/:courseId/:quizId', requireSignin, submitQuiz);
 
 export default router;

@@ -27,8 +27,8 @@ import {
 const router = express.Router();
 
 // image
-router.post('/upload-image', requireSignin, uploadImageController);
-router.post('/remove-image', requireSignin, removeImageController);
+router.post('/ins/upload-image', requireSignin, uploadImageController);
+router.post('/ins/remove-image', requireSignin, removeImageController);
 
 // public
 router.get('/public', getPublishedCourses);
