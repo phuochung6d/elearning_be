@@ -46,7 +46,8 @@ const userSchema = new Schema(
     courses: [{
       _id: false,
       courseId: { type: String, ref: 'Course' },
-      completedLessons: { type: [String] }
+      completedLessons: { type: [String] },
+      completedQuizzes: { type: [String]}
     }],
     stripe_account_id: {},
     stripe_seller: {},

@@ -334,10 +334,16 @@ const updateCourse = async (req, res) => {
         data: null
       });
 
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated?.lessons?.forEach((lesson, index) => {
+      const found = updated?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = found ? found : lesson?.section
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Update course successfully',
-      data: updated
+      data: _updated
     })
 
   }
@@ -358,7 +364,6 @@ const getInstructorCourses = async (req, res) => {
       .find({ instructor: req.user._id });
 
     let _instructorCourses = JSON.parse(JSON.stringify(instructorCourses));
-
     instructorCourses?.forEach((course, index_course) => {
       course?.lessons?.forEach((lesson, index_lesson) => {
         const found = course?.sections?.find(section => section._id === lesson.section);
@@ -678,7 +683,22 @@ const deleteLesson = async (req, res) => {
 const updateLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
+    const { sameIndexAcceptable } = req.body;
     const { index, section, title, content, duration, video_link, free_preview } = req.body.lesson;
+
+    const course = await Course.findById(courseId);
+    const lessonIndexes = course.lessons.filter(lesson => lesson.section === section).map(lesson => lesson.index);
+
+    console.log('index: ', index);
+    console.log('lessonIndexes: ', lessonIndexes);
+
+    if (!sameIndexAcceptable)
+      if (lessonIndexes.includes(index))
+        return res.status(400).json({
+          success: false,
+          message: 'Index is taken, please choose another one',
+          data: null
+        });
 
     const updated = await Course.findOneAndUpdate(
       { "lessons._id": lessonId },
@@ -709,6 +729,8 @@ const updateLesson = async (req, res) => {
       const found = updated?.sections?.find(section => section?._id === lesson?.section);
       _updated.lessons[index].section = found ? found : lesson?.section
     });
+
+    // const __updated = populate(updated, 'lessons', 'section', 'sections');
 
     return res.status(200).json({
       success: true,

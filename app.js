@@ -9,6 +9,8 @@ import authRouter from './routes/auth';
 import instructorRouter from './routes/instructor';
 import userRouter from './routes/user';
 import courseRouter from './routes/course';
+import reviewRouter from './routes/review';
+import qaRouter from './routes/qa';
 
 dotenv.config({ path: process.env });
 
@@ -34,6 +36,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/instructor', instructorRouter);
 app.use('/api/user', userRouter);
 app.use('/api/course', courseRouter);
+app.use('/api/review', reviewRouter);
+app.use('/api/qa', qaRouter);
 
 // app.listen(port, () => console.log(`Listening on port ${port}...!`))
 
