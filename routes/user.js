@@ -4,6 +4,7 @@ import {
   isInstructor,
   isCurrentInstructor,
   isEnrolled,
+  verifyRole,
 } from '../middlewares';
 import {
   freeEnrollmentController,
@@ -15,6 +16,7 @@ import {
   markLessonCompleted,
   markLessonIncompleted,
   submitQuiz,
+  getAllUsers,
 } from '../controllers/user';
 
 const router = express.Router();
@@ -49,5 +51,8 @@ router.post(
 
 // answer quiz
 router.post('/quiz-answer/:courseId/:quizId', requireSignin, submitQuiz);
+
+// admin: statistic
+router.get('/ad', requireSignin, verifyRole('Admin'), getAllUsers);
 
 export default router;

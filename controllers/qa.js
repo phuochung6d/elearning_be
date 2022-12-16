@@ -241,11 +241,9 @@ const deleteQA = async (req, res) => {
   try {
     const { courseId, lessonId, qaId } = req.params;
 
-    await QA.findOneAndDelete({
-      _id: qaId,
-      courseId,
-      lessonId,
-    });
+    await QA.deleteMany({
+      $or: [{ _id: qaId }, { replyQAId: qaId }]
+    })
 
     return res.status(200).json({
       success: true,
@@ -373,6 +371,27 @@ const getQAReplies = async (req, res) => {
   }
 }
 
+const getAllQAs = async (req, res) => {
+  try {
+    const qas = await QA.find();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get all Q&As successfully',
+      data: qas,
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get replies of QA unsuccessfully, try again!',
+      data: null
+    })
+  }
+}
+
 export {
   getQAs,
   getQAByIdOfLesson,
@@ -380,4 +399,5 @@ export {
   updateQA,
   deleteQA,
   getQAReplies,
+  getAllQAs,
 }

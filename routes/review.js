@@ -6,6 +6,7 @@ import {
   addReview,
   updateReview,
   deleteReview,
+  getAllReviews,
 } from '../controllers/review';
 
 const router = express.Router();
@@ -18,5 +19,8 @@ router.get('/public/course/:courseId/:reviewId', getPublicReviewById);
 router.post('/course/:courseId', requireSignin, addReview);
 router.put('/course/:courseId/:reviewId/update', requireSignin, updateReview);
 router.put('/course/:courseId/:reviewId/delete', requireSignin, deleteReview);
+
+// users: admin: statistic
+router.get('/ad', requireSignin, verifyRole('Admin'), getAllReviews);
 
 export default router;

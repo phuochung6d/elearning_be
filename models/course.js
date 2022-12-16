@@ -122,6 +122,10 @@ const courseSchema = new mongoose.Schema(
       required: true,
       default: uuidv4
     },
+    category: {
+      type: String,
+      required: true
+    },
     requirements: {
       type: [String]
     },
@@ -145,11 +149,10 @@ const courseSchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      minlength: 200,
       required: true,
     },
     image: {},
-    category: {
+    tags: {
       type: [String]
     },
     price: {
@@ -175,6 +178,14 @@ const courseSchema = new mongoose.Schema(
     languages: {
       type: [String],
       required: true
+    },
+    status: {
+      type: String,
+      enum: ['unpublic', 'unaccepted', 'rejected', 'public']
+    },
+    rejected_reasons: [String],
+    official_data: {
+      type: Object
     },
     createdAt: Number,
     updatedAt: Number,

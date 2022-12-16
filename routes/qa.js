@@ -7,6 +7,7 @@ import {
   updateQA,
   deleteQA,
   getQAReplies,
+  getAllQAs,
 } from '../controllers/qa';
 
 const router = express.Router();
@@ -17,7 +18,6 @@ const router = express.Router();
 router.get('/course/:courseId', requireSignin, getQAs);
 router.get('/course/:courseId/lesson/:lessonId/:qaId', requireSignin, getQAByIdOfLesson);
 
-
 // qa reply
 router.get('/course/:courseId/qa/:qaId', requireSignin, getQAReplies);
 
@@ -25,5 +25,8 @@ router.get('/course/:courseId/qa/:qaId', requireSignin, getQAReplies);
 router.post('/course/:courseId/lesson/:lessonId', requireSignin, addQA);
 router.put('/course/:courseId/lesson/:lessonId/:qaId/update', requireSignin, updateQA);
 router.put('/course/:courseId/lesson/:lessonId/:qaId/delete', requireSignin, deleteQA);
+
+// admin: statistic
+router.get('/ad', requireSignin, verifyRole('Admin'), getAllQAs);
 
 export default router;

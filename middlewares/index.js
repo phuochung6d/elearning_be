@@ -52,8 +52,9 @@ const isInstructor = async (req, res, next) => {
 
 const verifyRole = (...roles) => {
   return async (req, res, next) => {
-    const user = await User.findById(req.user._id);
-    if (!roles.includes(user.role))
+    const user = await User.findById(req.user._id).select('_id role');
+
+    if (!user.role.includes(roles))
       return res.status(403).json({
         success: false,
         message: 'Forbidden route for this role',
@@ -97,20 +98,25 @@ const isEnrolled = async (req, res, next) => {
     const { slug, courseId } = req.params;
     const { _id: idUser } = req.user;
 
-    const course = await Course.findOne(slug ? { slug } : { _id: courseId });
+    const course = await Course.findOne(
+      slug ? { 'official_data.slug': slug } : { 'official_data._id': courseId }
+    );
 
     const user = await User.findById({ _id: idUser });
 
     // console.log(chalk.blue('course: '), course);
     // console.log(chalk.blue('user: '), user);
 
-    if (user.courses.findIndex(item => item.courseId === course._id) === -1)
+    const checked = user.courses.findIndex(item => item.courseId === course._id);
+
+    if (checked === -1 && idUser !== course.instructor)
       return res.status(403).json({
         success: false,
         message: 'Not authorized',
         data: null
       })
 
+    console.log('success');
     next();
   }
   catch (error) {
