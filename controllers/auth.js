@@ -130,7 +130,7 @@ const logout = async (req, res) => {
 const getCurrentUser = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
-    console.log('CURRENT USER', user);
+    
     return res.status(200).json({
       success: true,
       message: 'Get current user successfully',

@@ -10,13 +10,13 @@ const getPublicReview = async (req, res) => {
     const { content, star } = req.query;
     
     const filterObj = {};
-    if (courseId) filterObj['courseId'] = courseId
+    if (courseId) filterObj['courseId'] = courseId;
     if (content?.length) filterObj['content'] = { $regex: content, $options: 'i' };
     if (star && star !== '0') filterObj['star'] = +star;
 
     console.log(filterObj);
 
-    const reviewTotal = await Review.find().select('star userId');
+    const reviewTotal = await Review.find({ courseId }).select('star userId');
 
     const reviews = await Review.aggregate([
       {
@@ -251,10 +251,32 @@ const deleteReview = async (req, res) => {
   }
 }
 
+const getAllReviews = async (req, res) => {
+  try {
+    const reviews = await Review.find();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get all review by admin successfully, try again',
+      data: reviews,
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get all reviews fail, try again!',
+      data: null
+    })
+  }
+}
+
 export {
   getPublicReview,
   getPublicReviewById,
   addReview,
   updateReview,
   deleteReview,
+  getAllReviews,
 }

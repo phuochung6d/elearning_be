@@ -4,6 +4,8 @@ import chalk from 'chalk';
 import Course from '../models/course';
 import slugify from 'slugify';
 import { readFileSync } from "fs";
+import lodash from 'lodash';
+import dayjs from 'dayjs';
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
@@ -13,6 +15,32 @@ const awsConfig = {
 }
 
 const s3 = new aws.S3(awsConfig);
+
+const isAllowEditingCourse = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
+
+    const course = await Course.findById(courseId);
+
+    if (course.status === 'unaccepted')
+      return res.status(400).json({
+        success: false,
+        message: `Permission of editing course is taken`,
+        data: null
+      });
+    else
+      next();
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete image fail, try again!',
+      data: null
+    });
+  }
+}
 
 const uploadImageController = async (req, res) => {
   try {
@@ -67,6 +95,11 @@ const uploadImageController = async (req, res) => {
   catch (error) {
     console.log(chalk.red('errrror: '));
     console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Upload image fail, try again!',
+      data: null
+    });
   }
 }
 
@@ -110,18 +143,63 @@ const removeImageController = async (req, res) => {
 const getPublishedCourses = async (req, res) => {
   try {
     const filters = {};
-    filters['published'] = true;
-    if (req.query.paid) filters['paid'] = req.query.paid === 'true';
-    if (req.query.category) filters['category'] = req.query.category;
-    const courses = await Course
-      .find(filters)
-      .select('category summary goal requirements languages description name paid price slug image lessons updatedAt')
-      .populate({ path: 'instructor', select: 'name' });
+    filters['official_data.published'] = true;
+    // filters['official_data.status'] = 'public';
+    if (req.query.paid) filters['official_data.paid'] = req.query.paid === 'true';
+    if (req.query.tags) filters['official_data.tags'] = req.query.tags;
+
+    const courses = await Course.aggregate([
+      {
+        $match: filters
+      },
+      {
+        $replaceRoot: { newRoot: '$official_data' }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] },
+                  ]
+                }
+              }
+            },
+            {
+              $project: { name: 1 }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructor: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $sort: {
+          updateAt: -1
+        }
+      }
+    ]);
+
+    let _courses = JSON.parse(JSON.stringify(courses));
+    courses?.forEach((course, index_course) => {
+      course?.lessons?.forEach((lesson, index_lesson) => {
+        const found = course?.sections?.find(section => section._id === lesson.section);
+        _courses[index_course].lessons[index_lesson].section = found ? found : lesson?.section
+      })
+    })
 
     return res.status(200).json({
       success: true,
       message: 'Get public course successfully',
-      data: courses
+      data: _courses
     })
   }
   catch (error) {
@@ -140,10 +218,49 @@ const getPublicCourseBySlug = async (req, res) => {
     req.query.data = Date.now();
 
   try {
-    const course = await Course
-      .findOne({ slug: req.params.slug })
-      .populate({ path: 'instructor', select: 'name role' })
-      .select('name summary goal requirements languages slug description image category price paid updatedAt lessons');
+    const filters = {};
+    filters['official_data.published'] = true;
+    // filters['official_data.status'] = 'public';
+    if (req.params.slug) filters['official_data.slug'] = req.params.slug;
+
+    const [course] = await Course.aggregate([
+      {
+        $match: filters
+      },
+      {
+        $replaceRoot: { newRoot: '$official_data' }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: { name: 1, role: 1 }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructor: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
+
     if (!course)
       return res.status(204).json({
         success: false,
@@ -151,10 +268,16 @@ const getPublicCourseBySlug = async (req, res) => {
         data: null
       });
 
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
     return res.status(200).json({
       success: true,
       message: `Get course successfully. Time: ${req.query.date}`,
-      data: course
+      data: _course
     })
   }
   catch (error) {
@@ -170,7 +293,48 @@ const getPublicCourseBySlug = async (req, res) => {
 
 const getPublicCourseById = async (req, res) => {
   try {
-    const course = await Course.findById(req.params.courseId);
+    const filters = {};
+    filters['official_data.published'] = true;
+    filters['official_data.status'] = 'public';
+    if (req.params.slug) filters['official_data._id'] = req.params.courseId;
+
+    const [course] = await Course.aggregate([
+      {
+        $match: filters
+      },
+      {
+        $replaceRoot: { newRoot: '$official_data' }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: { name: 1, role: 1 }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructor: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $limit: 1
+      }
+    ])
 
     if (!course)
       return res.status(400).json({
@@ -179,10 +343,16 @@ const getPublicCourseById = async (req, res) => {
         data: null
       });
 
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Get course by id successfully',
-      data: course
+      data: _course
     })
   }
   catch (error) {
@@ -289,6 +459,8 @@ const createCourse = async (req, res) => {
     const newCourse = new Course({
       slug: slugify(req.body.name),
       instructor: req.user._id,
+      status: 'unpublic',
+      published: false,
       ...req.body
     })
 
@@ -316,7 +488,7 @@ const updateCourse = async (req, res) => {
     const { courseId } = req.params;
 
     const value = {};
-    ['name', 'summary', 'slug', 'image', 'description', 'category', 'paid', 'price', 'published', 'requirements', 'goal', 'languages']
+    ['name', 'summary', 'image', 'description', 'category', 'tags', 'paid', 'price', 'requirements', 'goal', 'languages']
       .forEach(item => {
         if (Object.keys(req.body).includes(item))
           value[`${item}`] = req.body[`${item}`];
@@ -324,7 +496,11 @@ const updateCourse = async (req, res) => {
 
     const updated = await Course.findOneAndUpdate(
       { _id: courseId },
-      value,
+      {
+        ...value,
+        slug: slugify(req.body.name),
+        status: 'unpublic',
+      },
       { new: true }
     );
     if (!updated)
@@ -345,7 +521,6 @@ const updateCourse = async (req, res) => {
       message: 'Update course successfully',
       data: _updated
     })
-
   }
   catch (error) {
     console.log(chalk.red('error: '));
@@ -358,10 +533,123 @@ const updateCourse = async (req, res) => {
   }
 }
 
+const submitPublish = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const updated = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        status: 'unaccepted'
+      },
+      { new: true }
+    );
+
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated?.lessons?.forEach((lesson, index) => {
+      const found = updated?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Submit publish for this course successfully',
+      data: _updated
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Submit publish course fail',
+      data: null
+    })
+  }
+}
+
+const submitUndoPublish = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const updated = await Course.findByIdAndUpdate(
+      courseId,
+      {
+        status: 'unpublic'
+      },
+      { new: true }
+    );
+
+    const _updated = JSON.parse(JSON.stringify(updated));
+    updated?.lessons?.forEach((lesson, index) => {
+      const found = updated?.sections?.find(section => section?._id === lesson?.section);
+      _updated.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Submit undo publish for this course successfully',
+      data: _updated
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Submit undo publish course fail',
+      data: null
+    })
+  }
+}
+
 const getInstructorCourses = async (req, res) => {
   try {
-    const instructorCourses = await Course
-      .find({ instructor: req.user._id });
+    // const instructorCourses = await Course
+    //   .find({ instructor: req.user._id });
+
+    console.log('query: ', req.query);
+
+    const filters = {};
+    if (req.query.published) filters['published'] = req.query.published === 'true';
+    if (req.query.status) filters['status'] = req.query.status;
+
+    const instructorCourses = await Course.aggregate([
+      {
+        $match: filters
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$course_instructor'] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: { password: 0, passwordResetCode: 0 }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructorInfo: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $sort: {
+          updatedAt: -1
+        }
+      }
+    ]);
 
     let _instructorCourses = JSON.parse(JSON.stringify(instructorCourses));
     instructorCourses?.forEach((course, index_course) => {
@@ -390,9 +678,62 @@ const getInstructorCourses = async (req, res) => {
 
 const getCourseBySlug = async (req, res) => {
   try {
-    const course = await Course
-      .findOne({ slug: req.params.slug })
-      .populate({ path: 'instructor', select: 'name role' });
+    // const course = await Course
+    //   .findOne({ slug: req.params.slug })
+    //   .populate({ path: 'instructor', select: 'name role' });
+
+    const [course] = await Course.aggregate([
+      {
+        $match: {
+          slug: req.params.slug
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          let: { course_category: '$category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'categoryInfo'
+        }
+      },
+      {
+        $set: {
+          instructorInfo: { $first: '$instructorInfo' },
+          categoryInfo: { $first: '$categoryInfo' }
+        }
+      },
+      {
+        $limit: 1
+      }
+    ])
 
     const _course = JSON.parse(JSON.stringify(course));
     course?.lessons?.forEach((lesson, index) => {
@@ -453,7 +794,8 @@ const addSection = async (req, res) => {
             index,
             name
           }
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     );
@@ -507,7 +849,8 @@ const deleteSection = async (req, res) => {
           sections: {
             _id: sectionId
           }
-        }
+        },
+        status: 'unpublic'
       },
       {
         new: true
@@ -569,7 +912,8 @@ const updateSection = async (req, res) => {
         $set: {
           'sections.$.index': index,
           'sections.$.name': name
-        }
+        },
+        status: 'unpublic'
       },
       {
         new: true
@@ -609,7 +953,8 @@ const addLesson = async (req, res) => {
       {
         $push: {
           lessons: { index, section, title, content, video_link, free_preview, duration, slug: slugify(title) }
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     ).populate({ path: 'instructor', select: '_id name' });
@@ -646,7 +991,8 @@ const deleteLesson = async (req, res) => {
       {
         $pull: {
           lessons: { _id: lessonId }
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     );
@@ -689,9 +1035,6 @@ const updateLesson = async (req, res) => {
     const course = await Course.findById(courseId);
     const lessonIndexes = course.lessons.filter(lesson => lesson.section === section).map(lesson => lesson.index);
 
-    console.log('index: ', index);
-    console.log('lessonIndexes: ', lessonIndexes);
-
     if (!sameIndexAcceptable)
       if (lessonIndexes.includes(index))
         return res.status(400).json({
@@ -712,7 +1055,8 @@ const updateLesson = async (req, res) => {
           "lessons.$.free_preview": free_preview,
           "lessons.$.index": index,
           "lessons.$.section": section
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     );
@@ -772,7 +1116,8 @@ const addQuiz = async (req, res) => {
       {
         $push: {
           quizzes: { lesson: lessonId, question, answer, correctAnswer }
-        }
+        },
+        status: 'unpublic'
       },
       {
         new: true
@@ -811,7 +1156,8 @@ const deleteQuiz = async (req, res) => {
       {
         $pull: {
           quizzes: { _id: quizId }
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     );
@@ -857,7 +1203,8 @@ const updateQuiz = async (req, res) => {
           "quizzes.$.question": question,
           "quizzes.$.answer": answer,
           "quizzes.$.correctAnswer": correctAnswer,
-        }
+        },
+        status: 'unpublic'
       },
       { new: true }
     );
@@ -885,7 +1232,187 @@ const updateQuiz = async (req, res) => {
   }
 }
 
+const getAllCourses = async (req, res) => {
+  try {
+    const course = await Course.find();
+
+    let _course = JSON.parse(JSON.stringify(course));
+    course?.forEach((course, index_course) => {
+      course?.lessons?.forEach((lesson, index_lesson) => {
+        const found = course?.sections?.find(section => section._id === lesson.section);
+        _course[index_course].lessons[index_lesson].section = found ? found : lesson?.section
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get all course by admin successfully',
+      data: _course
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get courses by admin fail, try again!',
+      data: null
+    })
+  }
+}
+
+const getCourseInspectByAdmin = async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    const courses = await Course.find({
+      status: 'unaccepted',
+      published: (type === 'new') ? false : true
+    });
+
+    let _courses = JSON.parse(JSON.stringify(courses));
+    courses?.forEach((course, index_course) => {
+      courses?.lessons?.forEach((lesson, index_lesson) => {
+        const found = courses?.sections?.find(section => section._id === lesson.section);
+        _courses[index_course].lessons[index_lesson].section = found ? found : lesson?.section
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Get unpulic ${type} courses by admin successfully`,
+      data: _courses
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Get unpulic ${req.body.type} courses by admin fail, try again!`,
+      data: null
+    })
+  }
+}
+
+const getDetailCourseInspectByAdmin = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { type } = req.query;
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: 'unaccepted',
+      published: (type === 'new') ? false : true
+    });
+
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Get detail of unpulic ${type} courses by admin successfully`,
+      data: _course
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Get detail of unpulic ${req.body.type} courses by admin fail, try again!`,
+      data: null
+    })
+  }
+}
+
+const reviewNewCourseToPublish = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { isAccepted, reasons } = req.body;
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: 'unaccepted'
+    });
+
+    course.published = isAccepted;
+    course.status = isAccepted ? 'public' : 'rejected';
+    course.rejected_reasons = isAccepted ? [] : reasons;
+    course.official_data = isAccepted ? lodash.cloneDeep(course) : {};
+
+    await course.save();
+
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Grant permission for this course successfully',
+      data: _course
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Review new course to publish by admin fail, try again!',
+      data: null
+    })
+  }
+}
+
+const reviewEditCourseToPublish = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { isAccepted, reasons } = req.body;
+
+    const course = await Course.findOne({
+      _id: courseId,
+      status: 'unaccepted'
+    });
+
+    // course.published = isAccepted;
+    const originalCourseData = lodash.cloneDeep(course);
+    course.status = isAccepted ? 'public' : 'rejected';
+    course.rejected_reasons = isAccepted ? [] : reasons;
+    course.official_data = isAccepted ? lodash.cloneDeep(course) : originalCourseData;
+
+    await course.save();
+
+    const _course = JSON.parse(JSON.stringify(course));
+    course?.lessons?.forEach((lesson, index) => {
+      const found = course.sections.find(section => section?._id === lesson?.section);
+      _course.lessons[index].section = found ? found : lesson?.section
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Grant permission for this course successfully',
+      data: _course
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Review new course to publish by admin fail, try again!',
+      data: null
+    })
+  }
+}
+
+
 export {
+  isAllowEditingCourse,
   uploadImageController,
   removeImageController,
   getPublishedCourses,
@@ -895,6 +1422,8 @@ export {
   deleteVideoHandler,
   createCourse,
   updateCourse,
+  submitPublish,
+  submitUndoPublish,
   getInstructorCourses,
   getCourseBySlug,
   addSection,
@@ -906,4 +1435,9 @@ export {
   addQuiz,
   deleteQuiz,
   updateQuiz,
+  getAllCourses,
+  getCourseInspectByAdmin,
+  getDetailCourseInspectByAdmin,
+  reviewNewCourseToPublish,
+  reviewEditCourseToPublish,
 }

@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import User from '../models/user';
 import Course from '../models/course';
 import Stripe from 'stripe';
+import lodash from 'lodash';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const SUFFIX_STRIPE_USD = 100;
@@ -49,12 +50,13 @@ const freeEnrollmentController = async (req, res) => {
     const { courseId } = req.params;
 
     const course = await Course.findById(courseId).populate({ path: 'instructor' });
+
     if (req.user._id === course.instructor._id)
       return res.status(400).json({
         success: false,
-        message: 'This course is yours, can not do the paying operation',
+        message: 'This course is yours, can not do the payment',
         data: null
-      })
+      });
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -68,7 +70,8 @@ const freeEnrollmentController = async (req, res) => {
         },
       },
       { new: true }
-    ).select('-password -passwordResetCode');
+      )
+      .select('-password -passwordResetCode');
 
     if (!user)
       return res.status(400).json({
@@ -97,7 +100,53 @@ const freeEnrollmentController = async (req, res) => {
 const paidEnrollmentController = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const course = await Course.findById(courseId).populate({ path: 'instructor' });
+
+    const [course] = await Course.aggregate([
+      {
+        $match: {
+          _id: courseId
+        }
+      },
+      {
+        $replaceRoot: { newRoot: '$official_data' }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: { name: 1, stripe_account_id: 1 }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructor: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
+
+    if (req.user._id === course.instructor._id)
+      return res.status(400).json({
+        success: false,
+        message: 'This course is yours, can not do the payment',
+        data: null
+      });
 
     // 30% of application fee
     const fee = (course.price * 50) / 100;
@@ -206,31 +255,107 @@ const stripeSuccessRequest = async (req, res) => {
 
 const getEnrolledCourses = async (req, res) => {
   try {
-    const enrolledCourses = await User
-      .findById(req.user._id)
-      .select('-password -passwordResetCode')
-      .populate({
-        path: 'courses',
-        populate: {
-          path: 'courseId', select: '_id name image slug instructor',
-          populate: {
-            path: 'instructor', select: '_id name'
-          }
+    const [enrolledCourses] = await User.aggregate([
+      {
+        $match: { _id: req.user._id }
+      },
+      {
+        $unwind: '$courses'
+      },
+      {
+        $lookup: {
+          from: 'courses',
+          let: { 'user_courseId': '$courses.courseId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$user_courseId'] }
+                  ]
+                }
+              }
+            },
+            {
+              $replaceRoot: { newRoot: '$official_data' }
+            },
+            {
+              $project: {
+                name: 1, image: 1, slug: 1, instructor: 1, createdAt: 1, updatedAt: 1, lessons: 1, sections: 1
+              }
+            },
+            {
+              $lookup: {
+                from: 'users',
+                let: { 'user_instructor': '$instructor' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ['$_id', '$$user_instructor'] }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    $project: {
+                      name: 1, picture: 1, 
+                    }
+                  }
+                ],
+                as: 'instructorInfo'
+              }
+            },
+            {
+              $set: {
+                instructorInfo: { $first: '$instructorInfo' }
+              }
+            }
+          ],
+          as: 'courses.courseInfo'
         }
-      });
+      },
+      {
+        $set: {
+          'courses.courseInfo': { $first: '$courses.courseInfo' }
+        }
+      },
+      {
+        $group: {
+          _id: '$id',
+          name: { $first: "$name" }, email: { $first: "$email" }, picture: { $first: "$picture" },
+          role: { $first: "$role" }, createdAt: { $first: "$createdAt" }, updatedAt: { $first: "$updatedAt" },
+          stripeSession: { $first: "$stripeSession" },
+          courses: { $push: '$courses' }
+        }
+      },
+      {
+        $project: { password: 0, passwordResetCode: 0 }
+      },
+      {
+        $sort: {
+          updatedAt: -1
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
 
-    let _instructorCourses = JSON.parse(JSON.stringify(enrolledCourses.courses));
+    let _enrolledCourses = lodash.cloneDeep(enrolledCourses);
     enrolledCourses?.courses?.forEach((course, index_course) => {
-      course?.lessons?.forEach((lesson, index_lesson) => {
-        const found = course?.sections?.find(section => section._id === lesson.section);
-        _instructorCourses[index_course].lessons[index_lesson].section = found ? found : lesson?.section
-      })
-    })
+      course?.courseInfo?.lessons?.forEach((lesson, index_lesson) => {
+        const foundSection = course?.courseInfo?.sections?.find(section => section._id === lesson.section);
+        _enrolledCourses.courses[index_course].courseInfo.lessons[index_lesson].section
+          = foundSection ? foundSection : lesson?.section
+      });
+    });
 
     return res.status(200).json({
       success: true,
       message: 'Get enrolled courses successfully',
-      data: enrolledCourses
+      data: _enrolledCourses
     })
   }
   catch (error) {
@@ -248,9 +373,48 @@ const getEnrolledCourseBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const course = await Course
-      .findOne({ slug })
-      .populate({ path: 'instructor', select: '_id name' });
+    const [course] = await Course.aggregate([
+      {
+        $match: {
+          'official_data.slug': slug
+        }
+      },
+      {
+        $replaceRoot: { newRoot: '$official_data' }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { course_instructor: '$instructor' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_instructor'] }
+                  ]
+                }
+              },
+              
+            },
+            {
+              $project: {
+                name: 1
+              }
+            }
+          ],
+          as: 'instructorInfo'
+        }
+      },
+      {
+        $set: {
+          instructor: { $first: '$instructorInfo' }
+        }
+      },
+      {
+        $limit: 1
+      }
+    ]);
 
     if (!course)
       return res.status(400).json({
@@ -422,6 +586,29 @@ const submitQuiz = async (req, res, next) => {
   }
 }
 
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User
+      .find()
+      .select('-password -passwordResetCode -stripe_seller -stripeSession');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Admin get all users successfully',
+      data: users,
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Submit quiz fail, try again! Detail: ${error.message}`,
+      data: null
+    })
+  }
+}
+
 export {
   freeEnrollmentController,
   paidEnrollmentController,
@@ -432,4 +619,5 @@ export {
   markLessonCompleted,
   markLessonIncompleted,
   submitQuiz,
+  getAllUsers,
 }
