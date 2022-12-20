@@ -12,6 +12,7 @@ import courseRouter from './routes/course';
 import reviewRouter from './routes/review';
 import qaRouter from './routes/qa';
 import categoryRouter from './routes/category';
+import paymentRouter from './routes/payment';
 
 dotenv.config({ path: process.env });
 
@@ -40,6 +41,7 @@ app.use('/api/course', courseRouter);
 app.use('/api/review', reviewRouter);
 app.use('/api/qa', qaRouter);
 app.use('/api/category', categoryRouter);
+app.use('/api/payment', paymentRouter);
 
 // app.listen(port, () => console.log(`Listening on port ${port}...!`))
 

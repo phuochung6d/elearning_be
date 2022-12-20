@@ -49,6 +49,17 @@ const userSchema = new Schema(
       completedLessons: { type: [String] },
       completedQuizzes: { type: [String]}
     }],
+    instructor_information: {
+      plan_start: { type: Number },
+      plan_type: { type: String, enum: ['silver, goal, premium'] },
+      summary: { type: String },
+      position: { type: String },
+      yoe: { type: Number },
+      social: {
+        linkedin: { type: String },
+        twitter: { type: String },
+      }
+    },
     stripe_account_id: {},
     stripe_seller: {},
     stripeSession: {}

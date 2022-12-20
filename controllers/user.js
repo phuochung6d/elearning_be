@@ -260,7 +260,7 @@ const getEnrolledCourses = async (req, res) => {
         $match: { _id: req.user._id }
       },
       {
-        $unwind: '$courses'
+        $unwind: { path: '$courses', preserveNullAndEmptyArrays: true }
       },
       {
         $lookup: {
@@ -281,7 +281,7 @@ const getEnrolledCourses = async (req, res) => {
             },
             {
               $project: {
-                name: 1, image: 1, slug: 1, instructor: 1, createdAt: 1, updatedAt: 1, lessons: 1, sections: 1
+                description: 0
               }
             },
             {
@@ -305,6 +305,27 @@ const getEnrolledCourses = async (req, res) => {
                   }
                 ],
                 as: 'instructorInfo'
+              }
+            },
+            {
+              $lookup: {
+                from: 'reviews',
+                let: { 'user_courseId': '$_id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ['$courseId', '$$user_courseId'] }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    $project: { createdAt: 0, updatedAt: 0, __v: 0 }
+                  }
+                ],
+                as: 'reviewList'
               }
             },
             {
@@ -334,6 +355,11 @@ const getEnrolledCourses = async (req, res) => {
         $project: { password: 0, passwordResetCode: 0 }
       },
       {
+        $set: {
+          courses: { $cond: { if: { $eq: ['$courses', [{}]] }, then: [], else: '$courses' } }
+        }
+      },
+      {
         $sort: {
           updatedAt: -1
         }
@@ -343,6 +369,8 @@ const getEnrolledCourses = async (req, res) => {
       }
     ]);
 
+    console.log('enrolledCourses: ', enrolledCourses);
+
     let _enrolledCourses = lodash.cloneDeep(enrolledCourses);
     enrolledCourses?.courses?.forEach((course, index_course) => {
       course?.courseInfo?.lessons?.forEach((lesson, index_lesson) => {
@@ -351,6 +379,8 @@ const getEnrolledCourses = async (req, res) => {
           = foundSection ? foundSection : lesson?.section
       });
     });
+
+    console.log('_enrolledCourses: ', _enrolledCourses);
 
     return res.status(200).json({
       success: true,
@@ -502,7 +532,6 @@ const markLessonIncompleted = async (req, res) => {
     if (user.courses[index].completedLessons.includes(lessonId)) {
       const course = await Course.findById(courseId);
       const quizOfLesson = course.quizzes.find(quiz => quiz.lesson === lessonId);
-      console.log('quizOfLesson: ', quizOfLesson);
 
       const tempCompletedLessons = user.courses[index].completedLessons.filter(_lessonId => _lessonId !== lessonId);
       const tempCompletedQuizzes = user.courses[index].completedQuizzes.filter(quizId => quizId !== quizOfLesson._id);

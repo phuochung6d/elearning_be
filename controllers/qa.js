@@ -7,8 +7,6 @@ const getQAs = async (req, res) => {
     const { courseId } = req.params;
     const { content, lessonId, other } = req.query;
 
-    console.log('req.query: ', req.query);
-
     const filterObj = {};
     filterObj['type'] = 'new';
     if (courseId) filterObj['courseId'] = courseId;
@@ -22,8 +20,6 @@ const getQAs = async (req, res) => {
     ];
     if (lessonId && lessonId !== 'all') filterObj['lessonId'] = lessonId;
     if (other === 'currentuser_asked') filterObj['userId'] = req.user._id;
-
-    console.log(filterObj);
 
     const qas = await QA.aggregate([
       {

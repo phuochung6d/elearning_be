@@ -14,8 +14,6 @@ const getPublicReview = async (req, res) => {
     if (content?.length) filterObj['content'] = { $regex: content, $options: 'i' };
     if (star && star !== '0') filterObj['star'] = +star;
 
-    console.log(filterObj);
-
     const reviewTotal = await Review.find({ courseId }).select('star userId');
 
     const reviews = await Review.aggregate([

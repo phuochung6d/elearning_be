@@ -30,6 +30,7 @@ import {
   getDetailCourseInspectByAdmin,
   reviewNewCourseToPublish,
   reviewEditCourseToPublish,
+  getAllVideoLinks,
 } from '../controllers/course';
 
 const router = express.Router();
@@ -94,5 +95,9 @@ router.put('/ad/course-new/:courseId',
   requireSignin, verifyRole('Admin'), reviewNewCourseToPublish);
 router.put('/ad/course-edit/:courseId',
   requireSignin, verifyRole('Admin'), reviewEditCourseToPublish);
+
+// test
+router.get('/video-links',
+  getAllVideoLinks);
 
 export default router;

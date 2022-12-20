@@ -35,11 +35,6 @@ const becomeInstructor = async (req, res) => {
     //   "stripe_user[email]": user.email,
     // })
 
-    console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-    console.log(accountLink);
-    console.log('////');
-    console.log(queryString.stringify(accountLink));
-
     // 5. then send account link as response to FE
     res.status(200).json({
       success: true,
@@ -131,8 +126,53 @@ const getCurrentInstructor = async (req, res) => {
   }
 }
 
+const becomeInstructor2 = async (req, res) => {
+  try {
+    const { summary, yoe, position, social_linkedin, social_twitter, userId } = req.body.value;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        instructor_information: {
+          summary,
+          position,
+          yoe,
+          social: {
+            linkedin: social_linkedin,
+            twitter: social_twitter,
+          }
+        },
+        $addToSet: { role: 'Instructor' }
+      },
+      { new: true }
+    ).select('-password -passwordResetCode');
+
+    if (!user) 
+      return res.status(400).json({
+        success: false,
+        message: `Something went wrong while registering Instructor. ${error.message}`,
+        data: null
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Registered',
+      data: user
+    })
+  }
+  catch(error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Something went wrong while registering Instructor. ${error.message}`,
+      data: null
+    })
+  }
+}
+
 export {
   becomeInstructor,
   getAccountStatus,
-  getCurrentInstructor
+  getCurrentInstructor,
+  becomeInstructor2
 }

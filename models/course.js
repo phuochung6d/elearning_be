@@ -127,7 +127,8 @@ const courseSchema = new mongoose.Schema(
       required: true
     },
     requirements: {
-      type: [String]
+      type: [String],
+      default: [],
     },
     name: {
       type: String,
@@ -145,7 +146,8 @@ const courseSchema = new mongoose.Schema(
       maxLength: 400,
     },
     goal: {
-      type: [String]
+      type: [String],
+      default: [],
     },
     description: {
       type: String,
@@ -153,7 +155,8 @@ const courseSchema = new mongoose.Schema(
     },
     image: {},
     tags: {
-      type: [String]
+      type: [String],
+      default: []
     },
     price: {
       type: Number,
@@ -177,7 +180,8 @@ const courseSchema = new mongoose.Schema(
     },
     languages: {
       type: [String],
-      required: true
+      required: true,
+      default: [],
     },
     status: {
       type: String,
