@@ -6,7 +6,8 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
-  getAllCategoriesByInstructor,
+  getAllCategories,
+  getCategoryDetail,
 } from '../controllers/category';
 
 const router = express.Router();
@@ -23,8 +24,10 @@ router.put('/ad/:categoryId/update',
   router.put('/ad/:categoryId/delete',
   requireSignin, verifyRole('Admin'), deleteCategory);
 
-// instructor
-router.get('/ins',
-  requireSignin, verifyRole('Instructor'), getAllCategoriesByInstructor);
+// public
+router.get('/public',
+  getAllCategories);
+router.get('/public/:categorySlug',
+  getCategoryDetail);
 
 export default router;

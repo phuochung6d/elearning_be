@@ -138,7 +138,7 @@ const deleteCategory = async (req, res) => {
   }
 }
 
-const getAllCategoriesByInstructor = async (req, res) => {
+const getAllCategories = async (req, res) => {
   try {
     const categories = await Category
       .find()
@@ -161,11 +161,34 @@ const getAllCategoriesByInstructor = async (req, res) => {
   }
 }
 
+const getCategoryDetail = async (req, res) => {
+  try {
+    const category = await Category
+      .findOne({ slug: req.params.categorySlug });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get all categories successfully, try again',
+      data: category,
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get category detail fail, try again!',
+      data: null
+    });
+  }
+}
+
 export {
   getAllCategoriesByAdmin,
   getCategory,
   createCategory,
   updateCategory,
   deleteCategory,
-  getAllCategoriesByInstructor,
+  getAllCategories,
+  getCategoryDetail,
 }
