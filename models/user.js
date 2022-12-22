@@ -34,11 +34,33 @@ const userSchema = new Schema(
     },
     role: {
       type: [String],
-      default: ['Subcriber'],
-      enum: ['Subcriber', 'Instructor', 'Admin']
+      default: ['Subscriber'],
+      enum: ['Subscriber', 'Instructor', 'Admin']
     },
     createdAt: Number,
     updatedAt: Number,
+    passwordResetCode: {
+      type: String,
+      default: '',
+    },
+    courses: [{
+      _id: false,
+      courseId: { type: String, ref: 'Course' },
+      completedLessons: { type: [String] },
+      completedQuizzes: { type: [String]}
+    }],
+    instructor_information: {
+      beforeClickMembership_type: { type: String },
+      plan_start: { type: Number },
+      plan_type: { type: String, enum: ['silver', 'gold', 'premium'] },
+      summary: { type: String },
+      position: { type: String },
+      yoe: { type: Number },
+      social: {
+        linkedin: { type: String },
+        twitter: { type: String },
+      }
+    },
     stripe_account_id: {},
     stripe_seller: {},
     stripeSession: {}
