@@ -9,7 +9,7 @@ const createPayment = async (req, res, next) => {
     var ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     var tmnCode = process.env.vnp_TmnCode;
     var secretKey = process.env.vnp_HashSecret;
-    var returnUrl = process.env.vnp_ReturnUrl;
+    var returnUrl = process.env.NODE_ENV === 'development' ? process.env.vnp_ReturnUrl_DEV : process.env.vnp_ReturnUrl_PROD;
     var createDate = dateFormat(date, 'yyyymmddHHmmss');
     var orderId = dateFormat(date, 'HHmmss');
     var amount = req.body.amount;
@@ -21,10 +21,11 @@ const createPayment = async (req, res, next) => {
     var currCode = 'VND';
 
     var vnp_Params = {};
+    // vnp_Params['vnp_Merchant'] = '';
+    // if (bankCode !== null && bankCode !== '') vnp_Params['vnp_BankCode'] = bankCode
     vnp_Params['vnp_Version'] = '2.1.0';
     vnp_Params['vnp_Command'] = 'pay';
     vnp_Params['vnp_TmnCode'] = tmnCode;
-    // vnp_Params['vnp_Merchant'] = ''
     vnp_Params['vnp_Locale'] = locale;
     vnp_Params['vnp_CurrCode'] = currCode;
     vnp_Params['vnp_TxnRef'] = orderId;
@@ -34,7 +35,6 @@ const createPayment = async (req, res, next) => {
     vnp_Params['vnp_ReturnUrl'] = returnUrl;
     vnp_Params['vnp_IpAddr'] = ipAddr;
     vnp_Params['vnp_CreateDate'] = createDate;
-    // if (bankCode !== null && bankCode !== '') vnp_Params['vnp_BankCode'] = bankCode
 
     // modify data of vnp_Params
     vnp_Params = sortObject(vnp_Params);
@@ -92,13 +92,24 @@ const getvnP_IPN = async (req, res, next) => {
 
       //Kiem tra du lieu co hop le khong, cap nhat trang thai don hang va gui ket qua cho VNPAY theo dinh dang duoi
       // res.status(200).json({RspCode: '00', Message: 'success'});
-      res.redirect('http://localhost:3000/vnpay/success');
+      res.redirect(
+        process.env.NODE_ENV === 'development'
+        ? process.env.vnp_SuccessUrl_DEV
+        : process.env.NODE_ENV === 'production'
+          ? process.env.vnp_SuccessUrl_PROD
+          : ''
+      );
     }
     else {
       console.log('thanh toan không thanh cong! ');
       // res.status(200).json({ RspCode: '97', Message: 'Fail checksum' });
-      // res.redirect(`http://localhost:3000/vnpay/cancel`);
-      res.json({ shortUrl: '`http://localhost:3000/vnpay/cancel' });
+      res.redirect(
+        process.env.NODE_ENV === 'development'
+        ? process.env.vnp_CancelUrl_DEV
+        : process.env.NODE_ENV === 'production'
+          ? process.env.vnp_CancelUrl_PROD
+          : ''
+      );
     }
   }
   catch (error) {

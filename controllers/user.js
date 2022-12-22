@@ -158,6 +158,15 @@ const paidEnrollmentController = async (req, res) => {
     const fee = (priceUSD * 30) / 100;
 
     // stripe session
+      const success_url =
+        `${process.env.NODE_ENV === 'development'
+          ? process.env.STRIPE_SUCCESS_URL_DEV
+          : process.env.STRIPE_SUCCESS_URL_PROD}/${course._id}`;
+      const cancel_url =
+        `${process.env.NODE_ENV === 'development'
+          ? process.env.STRIPE_CANCEL_URL_DEV
+          : process.env.STRIPE_CANCEL_URL_PROD}`;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -180,8 +189,8 @@ const paidEnrollmentController = async (req, res) => {
         }
       },
       // redirect url after successful payment
-      success_url: `${process.env.STRIPE_SUCCESS_URL}/${course._id}`,
-      cancel_url: `${process.env.STRIPE_CANCEL_URL}`
+      success_url,
+      cancel_url,
     });
 
     console.log('SESSION -> ', session);

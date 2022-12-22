@@ -25,10 +25,14 @@ const becomeInstructor = async (req, res) => {
     }
 
     // 3. create account link based on stripe_account_id (for FE to complete onboarding)
+    const stripe_redirect_url = process.env.NODE_ENV === 'development'
+      ? process.env.STRIPE_REDIRECT_URL_DEV
+      : process.env.STRIPE_REDIRECT_URL_PROD;
+
     let accountLink = await stripe.accountLinks.create({
       account: user.stripe_account_id,
-      refresh_url: process.env.STRIPE_REDIRECT_URL,
-      return_url: process.env.STRIPE_REDIRECT_URL,
+      refresh_url: stripe_redirect_url,
+      return_url: stripe_redirect_url,
       type: 'account_onboarding'
     }, {apiKey: process.env.STRIPE_SECRET_KEY});
 
@@ -210,6 +214,7 @@ const updateIntructorMembershipInfo = async (req, res) => {
         data: null
       });
 
+    user.instructor_information.beforeClickMembership_type = '';
     user.instructor_information.plan_type = beforeClickMembership_type;
     user.instructor_information.plan_start = dayjs().valueOf();
 
