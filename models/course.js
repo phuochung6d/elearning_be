@@ -160,11 +160,11 @@ const courseSchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      default: 9.99,
+      default: 0,
     },
     paid: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     instructor: {
       type: String,

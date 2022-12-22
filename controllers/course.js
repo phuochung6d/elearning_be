@@ -6,6 +6,7 @@ import slugify from 'slugify';
 import { readFileSync } from "fs";
 import lodash from 'lodash';
 import dayjs from 'dayjs';
+import { isEligibleInsMembership } from '../services/instructor';
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
@@ -404,9 +405,9 @@ const getPublicCourseById = async (req, res) => {
   try {
     const filters = {};
     filters['official_data.published'] = true;
-    filters['official_data.status'] = 'public';
-    if (req.params.slug) filters['official_data._id'] = req.params.courseId;
-
+    // filters['official_data.status'] = 'public';
+    if (req.params.courseId) filters['official_data._id'] = req.params.courseId;
+    
     const [course] = await Course.aggregate([
       {
         $match: filters
@@ -459,10 +460,12 @@ const getPublicCourseById = async (req, res) => {
           categoryInfo: { $first: '$categoryInfo' }
         }
       },
-      {
-        $limit: 1
-      }
-    ])
+      // {
+      //   $limit: 1
+      // }
+    ]);
+
+    console.log(course[0]?.name);
 
     if (!course)
       return res.status(400).json({
@@ -614,6 +617,15 @@ const createCourse = async (req, res) => {
 const updateCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
+
+    const checked = isEligibleInsMembership(req.user._id);
+
+    if (!checked && req.body.paid && req.body.price > 0)
+      return res.status(400).json({
+        success: false,
+        message: `Can't not set price because of ineliglble instructor membership, let give it free.`,
+        data: null,
+      })
 
     const value = {};
     ['name', 'summary', 'image', 'description', 'category', 'tags', 'paid', 'price', 'requirements', 'goal', 'languages']

@@ -4,6 +4,7 @@ dotenv.config();
 import chalk from 'chalk';
 import User from '../models/user';
 import Course from '../models/course';
+import dayjs from 'dayjs';
 
 const requireSignin = (req, res, next) => {
   try {
@@ -52,6 +53,8 @@ const isInstructor = async (req, res, next) => {
 
 const verifyRole = (...roles) => {
   return async (req, res, next) => {
+    console.log('verifyRole req.user: ', req.user);
+
     const user = await User.findById(req.user._id).select('_id role');
 
     if (!user.role.includes(roles))

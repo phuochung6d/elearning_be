@@ -50,8 +50,9 @@ const userSchema = new Schema(
       completedQuizzes: { type: [String]}
     }],
     instructor_information: {
+      beforeClickMembership_type: { type: String },
       plan_start: { type: Number },
-      plan_type: { type: String, enum: ['silver, goal, premium'] },
+      plan_type: { type: String, enum: ['silver', 'gold', 'premium'] },
       summary: { type: String },
       position: { type: String },
       yoe: { type: Number },
