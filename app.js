@@ -18,6 +18,9 @@ dotenv.config({ path: process.env });
 
 const app = express();
 
+//show dotenv info
+console.log('show dotenv info: \n' + process.env.NODE_ENV + '\n////');
+
 mongoose.connect(process.env.DATABASE)
   .then(() => console.log('DB connected'))
   .catch(() => console.log('Connect to DB error'))
