@@ -3,6 +3,7 @@ import User from '../models/user';
 import Course from '../models/course';
 import Stripe from 'stripe';
 import lodash from 'lodash';
+import { exchangeCurrency } from '../utils/exchangeCurrency';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const SUFFIX_STRIPE_USD = 100;
@@ -148,8 +149,13 @@ const paidEnrollmentController = async (req, res) => {
         data: null
       });
 
+    const exchangeRate = await exchangeCurrency();
+    console.log('exchangeRate: ', exchangeRate);
+
+    const [priceVND, priceUSD] = [course.price, (course.price / exchangeRate).toFixed(2)];
+
     // 30% of application fee
-    const fee = (course.price * 50) / 100;
+    const fee = (priceUSD * 30) / 100;
 
     // stripe session
     const session = await stripe.checkout.sessions.create({
@@ -162,15 +168,13 @@ const paidEnrollmentController = async (req, res) => {
             product_data: {
               name: course.name,
             },
-            unit_amount: Math.round(course.price.toFixed(2) * SUFFIX_STRIPE_USD)
+            unit_amount: Math.round(priceUSD * SUFFIX_STRIPE_USD)
           },
           quantity: 1
         },
       ],
-      // charge buyer and transfer remaining balance to seller (after fee)
-      payment_intent_data: {
-        // application_fee_amount: Math.round(fee.toFixed(2) * SUFFIX_STRIPE_USD),
-        application_fee_amount: Math.round(fee.toFixed(2) * SUFFIX_STRIPE_USD),
+      payment_intent_data: {  // charge buyer and transfer remaining balance to seller (after fee)
+        application_fee_amount: Math.round(fee * SUFFIX_STRIPE_USD),
         transfer_data: {
           destination: course.instructor.stripe_account_id,
         }

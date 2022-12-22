@@ -1,11 +1,13 @@
 import User from "../models/user";
 import Stripe from 'stripe';
 import queryString from 'query-string';
+import dayjs from "dayjs";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const becomeInstructor = async (req, res) => {
-  console.log('stripe sk: ', process.env.STRIPE_SECRET_KEY);
   try {
+    console.log('stripe sk: ', process.env.STRIPE_SECRET_KEY);
+    
     // 1. find user from db
     const user = await User.findById(req.user._id);
     if (!user)
@@ -170,9 +172,70 @@ const becomeInstructor2 = async (req, res) => {
   }
 }
 
+const tempSaveBeforeClickMembership = async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    user.instructor_information.beforeClickMembership_type = type;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `update temporarily save BeforeClickMembership info successfully`,
+      data: user
+    });
+  }
+  catch (error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Something went wrong while temporarily save BeforeClickMembership info. ${error.message}`,
+      data: null
+    })
+  }
+}
+
+const updateIntructorMembershipInfo = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    const { beforeClickMembership_type } = user.instructor_information;
+    if (!beforeClickMembership_type)
+      return res.status(400).json({
+        success: false,
+        message: `Not found beforeClickMembership_type, try again.`,
+        data: null
+      });
+
+    user.instructor_information.plan_type = beforeClickMembership_type;
+    user.instructor_information.plan_start = dayjs().valueOf();
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `update Intructor Membership Info successfully`,
+      data: user
+    });
+  }
+  catch(error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Something went wrong while updatinf Instructor membership info. ${error.message}`,
+      data: null
+    })
+  }
+}
+
 export {
   becomeInstructor,
   getAccountStatus,
   getCurrentInstructor,
-  becomeInstructor2
+  becomeInstructor2,
+  tempSaveBeforeClickMembership,
+  updateIntructorMembershipInfo,
 }
