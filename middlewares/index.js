@@ -53,8 +53,6 @@ const isInstructor = async (req, res, next) => {
 
 const verifyRole = (...roles) => {
   return async (req, res, next) => {
-    console.log('verifyRole req.user: ', req.user);
-
     const user = await User.findById(req.user._id).select('_id role');
 
     if (!user.role.includes(roles))
