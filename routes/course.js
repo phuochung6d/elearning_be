@@ -3,6 +3,8 @@ import { requireSignin, isInstructor, isCurrentInstructor, verifyRole } from '..
 import formidable from 'express-formidable';
 import {
   isAllowEditingCourse, // middleware
+  checkUpdatingRights,  // middleware
+  isChanged,  // middleware
   uploadImageController,
   removeImageController,
   createCourse,
@@ -53,7 +55,7 @@ router.get('/public/id/:courseId', getPublicCourseById);
 router.post('/ins',
   requireSignin, verifyRole('Instructor'), createCourse);
 router.put('/ins/:courseId',
-  requireSignin, verifyRole('Instructor'), isAllowEditingCourse, updateCourse);
+  requireSignin, verifyRole('Instructor'), isAllowEditingCourse, checkUpdatingRights, isChanged, updateCourse);
 router.put('/ins/:courseId/submit-publish',
   requireSignin, verifyRole('Instructor'), isAllowEditingCourse, submitPublish);
 router.put('/ins/:courseId/submit-undopublish',

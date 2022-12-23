@@ -46,7 +46,7 @@ const createPayment = async (req, res, next) => {
     // // add userId to url
     // const vnp_CustomParams['userId']
 
-    console.log('vnp_Params: ', vnp_Params);
+    // console.log('vnp_Params: ', vnp_Params);
 
     // create redirect link and send along with userId
     var vnpUrl = process.env.vnp_Url;
@@ -70,7 +70,7 @@ const createPayment = async (req, res, next) => {
 const getvnP_IPN = async (req, res, next) => {
   try {
     var vnp_Params = req.query;
-    console.log('vnp_Params: ', vnp_Params);
+
     var secureHash = vnp_Params['vnp_SecureHash'];
 
     delete vnp_Params['vnp_SecureHash'];
@@ -140,7 +140,43 @@ const sortObject = (obj) => {
   return sorted;
 }
 
+const checkIsPayForMembership = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    const [plan_type, plan_start] = [
+      user.instructor_information.plan_type,
+      user.instructor_information.plan_start
+    ];
+
+    if (plan_type) {
+      const checked = checkValidMembership(plan_type, plan_start);
+
+      if (!checked)
+        next();
+      else {
+        return res.status(400).json({
+          success: false,
+          message: `You've already paid for this course, please reload page`,
+          data: null
+        })
+      }
+    } else {
+      next();
+    }
+  }
+  catch(error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: `Something went wrong while checking is pay for membership with vnpay. ${error.message}`,
+      data: null
+    })
+  }
+}
+
 export {
+  checkIsPayForMembership,
   createPayment,
   getvnP_IPN,
 }
