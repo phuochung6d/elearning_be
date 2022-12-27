@@ -2,11 +2,13 @@ import aws from 'aws-sdk';
 import { nanoid } from 'nanoid';
 import chalk from 'chalk';
 import Course from '../models/course';
+import User from '../models/user';
 import slugify from 'slugify';
 import { readFileSync } from "fs";
 import lodash from 'lodash';
 import dayjs from 'dayjs';
 import { isEligibleInsMembership } from '../services/instructor';
+import { checkValidMembership } from '../utils/checkValidMembership';
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
@@ -26,7 +28,7 @@ const isAllowEditingCourse = async (req, res, next) => {
     if (course.status === 'unaccepted')
       return res.status(400).json({
         success: false,
-        message: `Permission of editing course is taken`,
+        message: `Can not editing course while submitting course for inspecting`,
         data: null
       });
     else
@@ -38,6 +40,110 @@ const isAllowEditingCourse = async (req, res, next) => {
     return res.status(400).json({
       success: false,
       message: 'Delete image fail, try again!',
+      data: null
+    });
+  }
+}
+
+const checkUpdatingRights = async (req, res, next) => {
+  try {
+    // const { paid, price } = req.body;
+    const { courseId } = req.params;
+
+    const user = await User.findById(req.user._id);
+    const [plan_type, plan_start] = [
+      user.instructor_information.plan_type,
+      user.instructor_information.plan_start
+    ];
+
+    const course = await Course.findById(courseId);
+    const [newPrice, price] = [
+      req.body.price > 0 && req.body.paid,  // T: có phí | F: ko có phí
+      course.price > 0 && course.paid,  // T: có phí | F: ko có phí
+    ];
+
+    if (price) {
+      const checked = checkValidMembership(plan_type, plan_start);
+
+      if (checked)
+        next();
+      else
+        return res.status(400).json({
+          success: false,
+          message: `Instructor having expired membership can not update their paid courses, please re-new the membership`,
+          data: null
+        });
+    }
+    else {
+      if (!newPrice)
+        next();
+      else {
+        const checked = checkValidMembership(plan_type, plan_start);
+
+        if (checked)
+          next();
+        else
+          return res.status(400).json({
+            success: false,
+            message: `Please join the membership to update free course to paid course`,
+            data: null
+          });
+      }
+    }
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Check updating rights fail, try again!',
+      data: null
+    });
+  }
+}
+
+const isChanged = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
+
+    const [course] = await Course.aggregate([
+      {
+        $match: { _id: courseId }
+      },
+      {
+        $limit: 1
+      }
+    ]);
+
+    let flag = false;
+    // let changedData = [];
+    Object.keys(req.body).forEach(async _ => {
+      if (
+        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course.official_data[`${_}`])
+        ||
+        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course[`${_}`])
+      ) {
+        // changedData.push({ field: `${_}`, oldData: course[`${_}`], newData: req.body[`${_}`] });
+        flag = true;
+        return;
+      }
+    });
+
+    if (flag)
+      next();
+    else
+      return res.status(400).json({
+        success: false,
+        message: `No data was changed`,
+        data: null
+      })
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Check changes of course fail, try again!',
       data: null
     });
   }
@@ -141,6 +247,45 @@ const removeImageController = async (req, res) => {
   }
 }
 
+const removeListImageController = async (req, res) => {
+  try {
+    const { image } = req.body;
+
+    image?.forEach(item => {
+      // params to s3 bucket
+      const imageParams = {
+        Bucket: item.Bucket,
+        Key: item.Key
+      }
+
+      //delete
+      s3.deleteObject(imageParams, (error, data) => {
+        if (error)
+          return res.status(400).json({
+            success: false,
+            message: error,
+            data: null
+          });
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Remove success',
+      data: 'SUCCESS'
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete image fail, try again!',
+      data: null
+    });
+  }
+}
+
 const getPublishedCourses = async (req, res) => {
   try {
     const filters = {};
@@ -172,7 +317,7 @@ const getPublishedCourses = async (req, res) => {
     if (req.query.limit) limit = +req.query.limit;
     let skip = 0;
     if (req.query.page) skip = (+req.query.page - 1) * +req.query.limit;
-    
+
     const courses = await Course.aggregate([
       {
         $match: {
@@ -407,7 +552,7 @@ const getPublicCourseById = async (req, res) => {
     filters['official_data.published'] = true;
     // filters['official_data.status'] = 'public';
     if (req.params.courseId) filters['official_data._id'] = req.params.courseId;
-    
+
     const [course] = await Course.aggregate([
       {
         $match: filters
@@ -592,6 +737,7 @@ const createCourse = async (req, res) => {
       instructor: req.user._id,
       status: 'unpublic',
       published: false,
+      official_data: {},
       ...req.body
     })
 
@@ -618,20 +764,16 @@ const updateCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
 
-    const checked = isEligibleInsMembership(req.user._id);
+    const course = await Course.findById(courseId);
 
-    if (!checked && req.body.paid && req.body.price > 0)
-      return res.status(400).json({
-        success: false,
-        message: `Can't not set price because of ineliglble instructor membership, let give it free.`,
-        data: null,
-      })
-
-    const value = {};
+    let value = {}, flag = false;
     ['name', 'summary', 'image', 'description', 'category', 'tags', 'paid', 'price', 'requirements', 'goal', 'languages']
       .forEach(item => {
-        if (Object.keys(req.body).includes(item))
+        if (Object.keys(req.body).includes(item)) {
           value[`${item}`] = req.body[`${item}`];
+          if (JSON.stringify(req.body[`${item}`]) !== JSON.stringify(course.official_data[`${item}`]))
+            flag = true;
+        }
       });
 
     const updated = await Course.findOneAndUpdate(
@@ -639,16 +781,14 @@ const updateCourse = async (req, res) => {
       {
         ...value,
         slug: slugify(req.body.name),
-        status: 'unpublic',
+        status: !course.official_data
+          ? 'unpublic'
+          : flag
+            ? 'unpublic'
+            : 'public',
       },
       { new: true }
     );
-    if (!updated)
-      return res.status(204).json({
-        success: false,
-        message: 'No course found with this slug',
-        data: null
-      });
 
     const _updated = JSON.parse(JSON.stringify(updated));
     updated?.lessons?.forEach((lesson, index) => {
@@ -751,6 +891,7 @@ const getInstructorCourses = async (req, res) => {
     filters['instructor'] = req.user._id;
     if (req.query.published) filters['published'] = req.query.published === 'true';
     if (req.query.status) filters['status'] = req.query.status;
+    if (req.query.name) filters['name'] = { $regex: req.query.name, $options: 'i' };
 
     let limit = 0;
     if (req.query.limit) limit = +req.query.limit;
@@ -784,14 +925,14 @@ const getInstructorCourses = async (req, res) => {
       },
       {
         $lookup: {
-          from: 'users',
-          let: { course_instructor: '$instructor' },
+          from: 'categories',
+          let: { course_category: '$category' },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$_id', '$$course_instructor'] },
+                    { $eq: ['$_id', '$$course_category'] },
                   ]
                 }
               }
@@ -800,12 +941,32 @@ const getInstructorCourses = async (req, res) => {
               $project: { name: 1 }
             }
           ],
-          as: 'instructorInfo'
+          as: 'categoryInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
         }
       },
       {
         $set: {
-          instructorInfo: { $first: '$instructorInfo' }
+          instructorInfo: { $first: '$instructorInfo' },
+          categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' }
         }
       },
       {
@@ -900,9 +1061,28 @@ const getCourseBySlug = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
-          categoryInfo: { $first: '$categoryInfo' }
+          categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' }
         }
       },
       {
@@ -910,7 +1090,7 @@ const getCourseBySlug = async (req, res) => {
       }
     ])
 
-    const _course = JSON.parse(JSON.stringify(course));
+    const _course = lodash.cloneDeep(course);
     course?.lessons?.forEach((lesson, index) => {
       const found = course.sections.find(section => section?._id === lesson?.section);
       _course.lessons[index].section = found ? found : lesson?.section
@@ -1076,8 +1256,29 @@ const updateSection = async (req, res) => {
           message: 'Exist current section index in this course',
           data: null
         });
-    }
+    };
 
+    // check if any changes
+    const [course] = await Course.aggregate([{ $match: { _id: courseId } }, { $limit: 1 }]);
+    const sectionInfo = course.sections.find(_ => _._id === sectionId);
+    console.log('sectionInfo: ', sectionInfo);
+    console.log('req.body: ', req.body);
+
+    let flag = false;
+    Object.keys(req.body).filter(_ => Object.keys(sectionInfo).includes(_)).forEach(key => {
+      if (JSON.stringify(req.body[`${key}`]) !== JSON.stringify(sectionInfo[`${key}`])) {
+        flag = true;
+        return;
+      }
+    });
+    if (!flag)
+      return res.status(400).json({
+        success: false,
+        message: `No data was changed`,
+        data: null
+      });
+
+    // update changes
     const courseUpdated = await Course.findOneAndUpdate(
       {
         _id: courseId,
@@ -1218,6 +1419,27 @@ const updateLesson = async (req, res) => {
           data: null
         });
 
+    // check if any changes
+    const [_course] = await Course.aggregate([{ $match: { _id: courseId } }, { $limit: 1 }]);
+    const lessonInfo = course.lessons.find(_ => _._id === lessonId);
+    console.log('lessonInfo: ', lessonInfo);
+    console.log('req.body.lesson: ', req.body.lesson);
+
+    let flag = false;
+    Object.keys(req.body.lesson).filter(_ => Object.keys(lessonInfo).includes(_)).forEach(key => {
+      if (JSON.stringify(req.body.lesson[`${key}`]) !== JSON.stringify(lessonInfo[`${key}`])) {
+        flag = true;
+        return;
+      }
+    });
+    if (!flag)
+      return res.status(400).json({
+        success: false,
+        message: `No data was changed`,
+        data: null
+      });
+
+    // update changes
     const updated = await Course.findOneAndUpdate(
       { "lessons._id": lessonId },
       {
@@ -1371,6 +1593,27 @@ const updateQuiz = async (req, res) => {
     const { courseId, lessonId, quizId } = req.params;
     const { question, answer, correctAnswer } = req.body.quiz;
 
+    // check if any changes
+    const [_course] = await Course.aggregate([{ $match: { _id: courseId } }, { $limit: 1 }]);
+    const quizInfo = _course.quizzes.find(_ => _._id === quizId);
+    console.log('quizInfo: ', quizInfo);
+    console.log('req.body.quiz: ', req.body.quiz);
+
+    let flag = false;
+    Object.keys(req.body.quiz).forEach(key => {
+      if (JSON.stringify(req.body.quiz[`${key}`]) !== JSON.stringify(quizInfo[`${key}`])) {
+        flag = true;
+        return;
+      }
+    });
+    if (!flag)
+      return res.status(400).json({
+        success: false,
+        message: `No data was changed`,
+        data: null
+      });
+
+    // update changes
     const updated = await Course.findOneAndUpdate(
       { "quizzes._id": quizId },
       {
@@ -1488,9 +1731,28 @@ const getCourseInspectByAdmin = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
           categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' },
         }
       }
     ]);
@@ -1570,9 +1832,28 @@ const getDetailCourseInspectByAdmin = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
           categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' },
         }
       },
       {
@@ -1733,9 +2014,12 @@ const getAllVideoLinks = async (req, res) => {
 
 
 export {
-  isAllowEditingCourse,
+  isAllowEditingCourse, // middleware
+  checkUpdatingRights,  // middleware
+  isChanged,  // middleware
   uploadImageController,
   removeImageController,
+  removeListImageController,
   getPublishedCourses,
   getPublicCourseBySlug,
   getPublicCourseById,
