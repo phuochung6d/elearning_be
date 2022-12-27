@@ -104,9 +104,11 @@ const checkUpdatingRights = async (req, res, next) => {
 
 const isChanged = async (req, res, next) => {
   try {
+    const { courseId } = req.params;
+
     const [course] = await Course.aggregate([
       {
-        $match: { _id: req.params.courseId }
+        $match: { _id: courseId }
       },
       {
         $limit: 1
@@ -114,10 +116,14 @@ const isChanged = async (req, res, next) => {
     ]);
 
     let flag = false;
-    let changedData = [];
-    Object.keys(req.body).forEach(_ => {
-      if (JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course[`${_}`])) {
-        changedData.push({ field: `${_}`, oldData: course[`${_}`], newData: req.body[`${_}`] })
+    // let changedData = [];
+    Object.keys(req.body).forEach(async _ => {
+      if (
+        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course.official_data[`${_}`])
+        ||
+        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course[`${_}`])
+      ) {
+        // changedData.push({ field: `${_}`, oldData: course[`${_}`], newData: req.body[`${_}`] });
         flag = true;
         return;
       }
@@ -228,6 +234,45 @@ const removeImageController = async (req, res) => {
         message: 'Remove success',
         data
       });
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete image fail, try again!',
+      data: null
+    });
+  }
+}
+
+const removeListImageController = async (req, res) => {
+  try {
+    const { image } = req.body;
+
+    image?.forEach(item => {
+      // params to s3 bucket
+      const imageParams = {
+        Bucket: item.Bucket,
+        Key: item.Key
+      }
+
+      //delete
+      s3.deleteObject(imageParams, (error, data) => {
+        if (error)
+          return res.status(400).json({
+            success: false,
+            message: error,
+            data: null
+          });
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Remove success',
+      data: 'SUCCESS'
     });
   }
   catch (error) {
@@ -717,15 +762,18 @@ const createCourse = async (req, res) => {
 
 const updateCourse = async (req, res) => {
   try {
-    console.log('updateCourse triggered!');
-
     const { courseId } = req.params;
 
-    const value = {};
+    const course = await Course.findById(courseId);
+
+    let value = {}, flag = false;
     ['name', 'summary', 'image', 'description', 'category', 'tags', 'paid', 'price', 'requirements', 'goal', 'languages']
       .forEach(item => {
-        if (Object.keys(req.body).includes(item))
+        if (Object.keys(req.body).includes(item)) {
           value[`${item}`] = req.body[`${item}`];
+          if (JSON.stringify(req.body[`${item}`]) !== JSON.stringify(course.official_data[`${item}`]))
+            flag = true;
+        }
       });
 
     const updated = await Course.findOneAndUpdate(
@@ -733,7 +781,11 @@ const updateCourse = async (req, res) => {
       {
         ...value,
         slug: slugify(req.body.name),
-        status: 'unpublic',
+        status: !course.official_data
+          ? 'unpublic'
+          : flag
+            ? 'unpublic'
+            : 'public',
       },
       { new: true }
     );
@@ -839,6 +891,7 @@ const getInstructorCourses = async (req, res) => {
     filters['instructor'] = req.user._id;
     if (req.query.published) filters['published'] = req.query.published === 'true';
     if (req.query.status) filters['status'] = req.query.status;
+    if (req.query.name) filters['name'] = { $regex: req.query.name, $options: 'i' };
 
     let limit = 0;
     if (req.query.limit) limit = +req.query.limit;
@@ -872,14 +925,14 @@ const getInstructorCourses = async (req, res) => {
       },
       {
         $lookup: {
-          from: 'users',
-          let: { course_instructor: '$instructor' },
+          from: 'categories',
+          let: { course_category: '$category' },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$_id', '$$course_instructor'] },
+                    { $eq: ['$_id', '$$course_category'] },
                   ]
                 }
               }
@@ -888,12 +941,32 @@ const getInstructorCourses = async (req, res) => {
               $project: { name: 1 }
             }
           ],
-          as: 'instructorInfo'
+          as: 'categoryInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
         }
       },
       {
         $set: {
-          instructorInfo: { $first: '$instructorInfo' }
+          instructorInfo: { $first: '$instructorInfo' },
+          categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' }
         }
       },
       {
@@ -988,9 +1061,28 @@ const getCourseBySlug = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
-          categoryInfo: { $first: '$categoryInfo' }
+          categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' }
         }
       },
       {
@@ -1639,9 +1731,28 @@ const getCourseInspectByAdmin = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
           categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' },
         }
       }
     ]);
@@ -1721,9 +1832,28 @@ const getDetailCourseInspectByAdmin = async (req, res) => {
         }
       },
       {
+        $lookup: {
+          from: 'categories',
+          let: { course_official_data_category: '$official_data.category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$course_official_data_category'] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: 'official_data.categoryInfo'
+        }
+      },
+      {
         $set: {
           instructorInfo: { $first: '$instructorInfo' },
           categoryInfo: { $first: '$categoryInfo' },
+          'official_data.categoryInfo': { $first: '$official_data.categoryInfo' },
         }
       },
       {
@@ -1889,6 +2019,7 @@ export {
   isChanged,  // middleware
   uploadImageController,
   removeImageController,
+  removeListImageController,
   getPublishedCourses,
   getPublicCourseBySlug,
   getPublicCourseById,

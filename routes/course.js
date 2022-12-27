@@ -7,6 +7,7 @@ import {
   isChanged,  // middleware
   uploadImageController,
   removeImageController,
+  removeListImageController,
   createCourse,
   updateCourse,
   submitPublish,
@@ -40,6 +41,7 @@ const router = express.Router();
 // image
 router.post('/ins/upload-image', requireSignin, uploadImageController);
 router.post('/ins/remove-image', requireSignin, removeImageController);
+router.post('/ins/remove-list-image', requireSignin, removeListImageController);
 
 // video
 router.post('/ins/upload-video/:instructorId', requireSignin, verifyRole('Instructor'), isCurrentInstructor, formidable(), uploadVideoHandler);
