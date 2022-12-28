@@ -1,5 +1,5 @@
 import User from "../models/user";
-import { hashPassword, comparePassword } from "../utils/auth";
+import { hashPassword, comparePassword } from "../../utils/auth";
 import jwt from 'jsonwebtoken';
 import aws from 'aws-sdk';
 import { nanoid } from 'nanoid'
