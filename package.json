@@ -7,9 +7,9 @@
     "node": "16.x"
   },
   "scripts": {
-    "start": "node --experimental-modules --es-module-specifier-resolution=node server.js",
-    "dev": "nodemon --experimental-modules --es-module-specifier-resolution=node server.js",
-    "start:prod": "SET NODE_ENV=production&& nodemon --experimental-modules --es-module-specifier-resolution=node server.js"
+    "start": "node --experimental-modules --es-module-specifier-resolution=node ./api/index.js",
+    "dev": "nodemon --experimental-modules --es-module-specifier-resolution=node ./api/index.js",
+    "start:prod": "SET NODE_ENV=production&& nodemon --experimental-modules --es-module-specifier-resolution=node ./api/index.js"
   },
   "keywords": [],
   "author": "",

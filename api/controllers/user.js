@@ -3,7 +3,7 @@ import User from '../models/user';
 import Course from '../models/course';
 import Stripe from 'stripe';
 import lodash from 'lodash';
-import { exchangeCurrency } from '../utils/exchangeCurrency';
+import { exchangeCurrency } from '../../utils/exchangeCurrency';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const SUFFIX_STRIPE_USD = 100;
