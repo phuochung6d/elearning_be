@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --experimental-modules --es-module-specifier-resolution=node ./api/index.js",
     "dev": "nodemon --experimental-modules --es-module-specifier-resolution=node ./api/index.js",
-    "start:prod": "set NODE_ENV=production&& nodemon --experimental-modules --es-module-specifier-resolution=node ./api/index.js"
+    "start:prod": "set NODE_ENV=production && nodemon --experimental-modules --es-module-specifier-resolution=node ./api/index.js"
   },
   "keywords": [],
   "author": "",
