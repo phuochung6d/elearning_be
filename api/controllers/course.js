@@ -7,8 +7,7 @@ import slugify from 'slugify';
 import { readFileSync } from "fs";
 import lodash from 'lodash';
 import dayjs from 'dayjs';
-import { isEligibleInsMembership } from '../services/instructor';
-import { checkValidMembership } from '../utils/checkValidMembership';
+import { checkValidMembership } from '../../utils/checkValidMembership';
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
