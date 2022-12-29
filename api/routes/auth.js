@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   register as registerController,
+  checkActivation,
   login as loginController,
   logout as logoutController,
   getCurrentUser as currentUser,
@@ -16,6 +17,8 @@ import { requireSignin } from '../middlewares';
 const router = express.Router();
 
 router.post('/register', registerController);
+
+router.post('/check-activation', checkActivation);
 
 router.post('/login', loginController);
 

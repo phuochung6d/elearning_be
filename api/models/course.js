@@ -61,6 +61,7 @@ const lessonSchema = new mongoose.Schema(
       type: {},
       minLength: 200,
     },
+    document_link: {},
     video_link: {},
     duration: {
       type: Number,

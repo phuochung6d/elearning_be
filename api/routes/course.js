@@ -8,6 +8,8 @@ import {
   uploadImageController,
   removeImageController,
   removeListImageController,
+  uploadPdfController,
+  removePdfController,
   createCourse,
   updateCourse,
   submitPublish,
@@ -42,6 +44,10 @@ const router = express.Router();
 router.post('/ins/upload-image', requireSignin, uploadImageController);
 router.post('/ins/remove-image', requireSignin, removeImageController);
 router.post('/ins/remove-list-image', requireSignin, removeListImageController);
+
+// file (pdf)
+router.post('/ins/upload-pdf', requireSignin, uploadPdfController);
+router.post('/ins/remove-pdf', requireSignin, removePdfController)
 
 // video
 router.post('/ins/upload-video/:instructorId', requireSignin, verifyRole('Instructor'), isCurrentInstructor, formidable(), uploadVideoHandler);
