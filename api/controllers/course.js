@@ -47,49 +47,50 @@ const isAllowEditingCourse = async (req, res, next) => {
 
 const checkUpdatingRights = async (req, res, next) => {
   try {
-    // const { paid, price } = req.body;
-    const { courseId } = req.params;
+    // // const { paid, price } = req.body;
+    // const { courseId } = req.params;
 
-    const user = await User.findById(req.user._id);
-    const [plan_type, plan_start] = [
-      user.instructor_information.plan_type,
-      user.instructor_information.plan_start
-    ];
+    // const user = await User.findById(req.user._id);
+    // const [plan_type, plan_start] = [
+    //   user.instructor_information.plan_type,
+    //   user.instructor_information.plan_start
+    // ];
 
-    const course = await Course.findById(courseId);
-    const [newPrice, price] = [
-      req.body.price > 0 && req.body.paid,  // T: có phí | F: ko có phí
-      course.price > 0 && course.paid,  // T: có phí | F: ko có phí
-    ];
+    // const course = await Course.findById(courseId);
+    // const [newPrice, price] = [
+    //   req.body.price > 0 && req.body.paid,  // T: có phí | F: ko có phí
+    //   course.price > 0 && course.paid,  // T: có phí | F: ko có phí
+    // ];
 
-    if (price) {
-      const checked = checkValidMembership(plan_type, plan_start);
+    // if (price) {
+    //   const checked = checkValidMembership(plan_type, plan_start);
 
-      if (checked)
-        next();
-      else
-        return res.status(400).json({
-          success: false,
-          message: `Instructor having expired membership can not update their paid courses, please re-new the membership`,
-          data: null
-        });
-    }
-    else {
-      if (!newPrice)
-        next();
-      else {
-        const checked = checkValidMembership(plan_type, plan_start);
+    //   if (checked)
+    //     next();
+    //   else
+    //     return res.status(400).json({
+    //       success: false,
+    //       message: `Instructor having expired membership can not update their paid courses, please re-new the membership`,
+    //       data: null
+    //     });
+    // }
+    // else {
+    //   if (!newPrice)
+    //     next();
+    //   else {
+    //     const checked = checkValidMembership(plan_type, plan_start);
 
-        if (checked)
-          next();
-        else
-          return res.status(400).json({
-            success: false,
-            message: `Please join the membership to update free course to paid course`,
-            data: null
-          });
-      }
-    }
+    //     if (checked)
+    //       next();
+    //     else
+    //       return res.status(400).json({
+    //         success: false,
+    //         message: `Please join the membership to update free course to paid course`,
+    //         data: null
+    //       });
+    //   }
+    // }
+    next();
   }
   catch (error) {
     console.log(chalk.red('errrror: '));
