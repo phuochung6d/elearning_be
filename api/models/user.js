@@ -22,6 +22,13 @@ const userSchema = new Schema(
       required: true,
       unique: true
     },
+    active: {
+      type: Boolean,
+      default: false
+    },
+    active_code: {
+      type: String
+    },
     password: {
       type: String,
       required: true,
