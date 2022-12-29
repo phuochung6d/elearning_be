@@ -17,6 +17,7 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    // 1) validate
     if (!name || !email || !password)
       return res.status(400).json({
         success: false,
@@ -24,6 +25,7 @@ const register = async (req, res) => {
         data: null
       });
 
+    // 2) check existence
     const isExisted = await User.findOne({ email });
     if (isExisted)
       return res.status(409).json({
@@ -32,17 +34,82 @@ const register = async (req, res) => {
         data: null
       });
 
+    // 3) hash password
     const hashedPass = await hashPassword(password);
 
+    // 4) create user
     const user = new User({ name, email, password: hashedPass });
+
+    // await user.save();
+
+    // 5) prepare email
+    let activate_link = process.env.NODE_ENV === 'development'
+      ? process.env.CLIENT_URL_DEV
+      : process.env.CLIENT_URL_PROD;
+    
+    const active_code = nanoid(6).toUpperCase();
+
+    activate_link += `/activation/${active_code}`;
+    console.log('activate_link: ', activate_link);
+
+    // 6) save user
+    user.active_code = active_code;
 
     await user.save();
 
-    return res.status(201).json({
-      sucess: true,
-      message: 'User is created',
-      data: { name, email }
+    // 7) send email
+    const emailParams = {
+      Source: process.env.EMAIL_FROM,
+      Destination: {
+        ToAddresses: [email]
+      },
+      ReplyToAddresses: [process.env.EMAIL_FROM],
+      Message: {
+        Subject: {
+          Charset: 'UTF-8',
+          Data: 'nextgoal | Account activation link'
+        },
+        Body: {
+          Html: {
+            Charset: 'UTF-8',
+            Data: `
+              <html>
+                <body>
+                  <h2>nextgoal</h2>
+                  <h1>Here is your account activation link</h1>
+                  <p>Please click to activate your account</p>
+                  <p>Here is your link: ${activate_link}</p>
+                </body>
+              </html>
+            `
+          }
+        }
+      }
+    };
+
+    const sentEmail = ses.sendEmail(emailParams).promise();
+
+    sentEmail.then(data => {
+      return res.status(200).json({
+        success: true,
+        message: 'Sent activation link email',
+        data: sentEmail
+      })
+    });
+    sentEmail.catch(error => {
+      console.log(error);
+      return res.status(200).json({
+        success: false,
+        message: 'Something wrong while doing sending activation link mail',
+        data: null
+      });
     })
+
+    // return res.status(201).json({
+    //   sucess: true,
+    //   message: 'User is created',
+    //   data: { name, email }
+    // })
   }
   catch (error) {
     console.log(error)
@@ -50,6 +117,42 @@ const register = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: 'Please try again',
+      data: null
+    })
+  }
+}
+
+const checkActivation = async (req, res) => {
+  try {
+    const { active_code } = req.body;
+
+    const user = await User.findOne({
+      active_code
+    }).select('-password -passwordResetCode');
+
+    if (!user)
+      return res.status(400).json({
+        success: false,
+        message: 'Not found code',
+        data: null
+      });
+
+    user.active = true;
+    user.active_code = '';
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Successfully activate this account, please sign in again',
+      data: user
+    })
+  }
+  catch (error) {
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Check activation false, Please try again',
       data: null
     })
   }
@@ -77,7 +180,15 @@ const login = async (req, res) => {
         data: null
       })
 
-    // 3) sign jwt
+    // 3) check is active
+    if (!user.active)
+      return res.status(400).json({
+        success: false,
+        message: `This user hasn't been activated yet`,
+        data: null
+      })
+
+    // 4) sign jwt
     const token = jwt.sign(
       { _id: user._id },
       process.env.JWT_SECRET,
@@ -85,7 +196,7 @@ const login = async (req, res) => {
       // { expiresIn: 60 }
     );
 
-    // 4) return user and token to client, exclude the password
+    // 5) return user and token to client, exclude the password
     user.password = undefined;
     res.cookie('token', token, {
       httpOnly: true,
@@ -176,7 +287,7 @@ const requestResetPasswordCode = async (req, res) => {
       Message: {
         Subject: {
           Charset: 'UTF-8',
-          Data: 'Password reset link'
+          Data: 'nextgoal | Password reset link'
         },
         Body: {
           Html: {
@@ -200,7 +311,7 @@ const requestResetPasswordCode = async (req, res) => {
     sentEmail.then(data => {
       return res.status(200).json({
         success: true,
-        message: 'Sent email',
+        message: 'Sent reset password mail',
         data: sentEmail
       });
     });
@@ -208,7 +319,7 @@ const requestResetPasswordCode = async (req, res) => {
       console.log(error);
       return res.status(200).json({
         success: false,
-        message: 'Something wrong while doing sending mail',
+        message: 'Something wrong while doing sending reset password mail',
         data: null
       });
     })
@@ -269,4 +380,4 @@ const resetPassword = async (req, res) => {
   }
 }
 
-export { register, login, logout, getCurrentUser, requestResetPasswordCode, resetPassword }
+export { register, checkActivation, login, logout, getCurrentUser, requestResetPasswordCode, resetPassword }

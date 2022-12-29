@@ -8,6 +8,7 @@ import { readFileSync } from "fs";
 import lodash from 'lodash';
 import dayjs from 'dayjs';
 import { checkValidMembership } from '../../utils/checkValidMembership';
+import { createNestedObject } from '../../utils/createNestedObject';
 
 const awsConfig = {
   accessKeyId: process.env.AWS_IAM_ACCESS_KEY_ID,
@@ -46,49 +47,50 @@ const isAllowEditingCourse = async (req, res, next) => {
 
 const checkUpdatingRights = async (req, res, next) => {
   try {
-    // const { paid, price } = req.body;
-    const { courseId } = req.params;
+    // // const { paid, price } = req.body;
+    // const { courseId } = req.params;
 
-    const user = await User.findById(req.user._id);
-    const [plan_type, plan_start] = [
-      user.instructor_information.plan_type,
-      user.instructor_information.plan_start
-    ];
+    // const user = await User.findById(req.user._id);
+    // const [plan_type, plan_start] = [
+    //   user.instructor_information.plan_type,
+    //   user.instructor_information.plan_start
+    // ];
 
-    const course = await Course.findById(courseId);
-    const [newPrice, price] = [
-      req.body.price > 0 && req.body.paid,  // T: có phí | F: ko có phí
-      course.price > 0 && course.paid,  // T: có phí | F: ko có phí
-    ];
+    // const course = await Course.findById(courseId);
+    // const [newPrice, price] = [
+    //   req.body.price > 0 && req.body.paid,  // T: có phí | F: ko có phí
+    //   course.price > 0 && course.paid,  // T: có phí | F: ko có phí
+    // ];
 
-    if (price) {
-      const checked = checkValidMembership(plan_type, plan_start);
+    // if (price) {
+    //   const checked = checkValidMembership(plan_type, plan_start);
 
-      if (checked)
-        next();
-      else
-        return res.status(400).json({
-          success: false,
-          message: `Instructor having expired membership can not update their paid courses, please re-new the membership`,
-          data: null
-        });
-    }
-    else {
-      if (!newPrice)
-        next();
-      else {
-        const checked = checkValidMembership(plan_type, plan_start);
+    //   if (checked)
+    //     next();
+    //   else
+    //     return res.status(400).json({
+    //       success: false,
+    //       message: `Instructor having expired membership can not update their paid courses, please re-new the membership`,
+    //       data: null
+    //     });
+    // }
+    // else {
+    //   if (!newPrice)
+    //     next();
+    //   else {
+    //     const checked = checkValidMembership(plan_type, plan_start);
 
-        if (checked)
-          next();
-        else
-          return res.status(400).json({
-            success: false,
-            message: `Please join the membership to update free course to paid course`,
-            data: null
-          });
-      }
-    }
+    //     if (checked)
+    //       next();
+    //     else
+    //       return res.status(400).json({
+    //         success: false,
+    //         message: `Please join the membership to update free course to paid course`,
+    //         data: null
+    //       });
+    //   }
+    // }
+    next();
   }
   catch (error) {
     console.log(chalk.red('errrror: '));
@@ -209,6 +211,65 @@ const uploadImageController = async (req, res) => {
   }
 }
 
+const uploadPdfController = async (req, res) => {
+  try {
+    const { pdfFile } = req.body;
+
+    if (!pdfFile)
+      res.status(400).json({
+        success: false,
+        message: 'No pdf file found',
+        data: pdfFile
+      });
+
+    // prepare pdf file
+    const [base64Data, fileType] = [
+      new Buffer.from(
+        pdfFile.replace(/^data:application\/\w+;base64,/, ""),
+        'base64'),
+      pdfFile.split(';')[0].split('/')[1]
+    ];
+
+    // declare params to S3 upload
+    const pdfFileUploadParams = {
+      Bucket: 'nextgoal-bucket',
+      Key: `${nanoid()}.${fileType}`,
+      Body: base64Data,
+      ACL: 'public-read',
+      ContentEncoding: 'base64',
+      ContentType: `application/pdf`,
+    }
+
+    // upload
+    s3.upload(
+      pdfFileUploadParams,
+      (error, data) => {
+        if (error)
+          return res.status(400).json({
+            success: false,
+            message: error,
+            data: null
+          });
+
+        return res.status(200).json({
+          success: true,
+          message: 'Upload success',
+          data
+        });
+      }
+    );
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Upload pdf fail, try again!',
+      data: null
+    });
+  }
+}
+
 const removeImageController = async (req, res) => {
   try {
     const { image } = req.body;
@@ -241,6 +302,43 @@ const removeImageController = async (req, res) => {
     return res.status(400).json({
       success: false,
       message: 'Delete image fail, try again!',
+      data: null
+    });
+  }
+}
+
+const removePdfController = async (req, res) => {
+  try {
+    const { pdfFile } = req.body;
+
+    // params to s3 bucket
+    const pdfParams = {
+      Bucket: pdfFile.Bucket,
+      Key: pdfFile.Key
+    }
+
+    //delete
+    s3.deleteObject(pdfParams, (error, data) => {
+      if (error)
+        return res.status(400).json({
+          success: false,
+          message: error,
+          data: null
+        });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Remove success',
+        data
+      });
+    });
+  }
+  catch (error) {
+    console.log(chalk.red('errrror: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Delete pdf fail, try again!',
       data: null
     });
   }
@@ -313,9 +411,9 @@ const getPublishedCourses = async (req, res) => {
     }
 
     let limit = 0;
-    if (req.query.limit) limit = +req.query.limit;
+    if (req.query.limit) limit = +req.query.limit; else limit = 14;
     let skip = 0;
-    if (req.query.page) skip = (+req.query.page - 1) * +req.query.limit;
+    if (req.query.page) skip = (+req.query.page - 1) * +req.query.limit; else skip = 0;
 
     const courses = await Course.aggregate([
       {
@@ -1320,14 +1418,14 @@ const updateSection = async (req, res) => {
 
 const addLesson = async (req, res) => {
   try {
-    const { index, section, title, content, video_link, free_preview, duration } = req.body;
+    const { index, section, title, content, video_link, document_link, free_preview, duration } = req.body;
     const { courseId } = req.params;
 
     const updated = await Course.findOneAndUpdate(
       { _id: courseId },
       {
         $push: {
-          lessons: { index, section, title, content, video_link, free_preview, duration, slug: slugify(title) }
+          lessons: { index, section, title, content, video_link, document_link, free_preview, duration, slug: slugify(title) }
         },
         status: 'unpublic'
       },
@@ -1405,7 +1503,7 @@ const updateLesson = async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
     const { sameIndexAcceptable } = req.body;
-    const { index, section, title, content, duration, video_link, free_preview } = req.body.lesson;
+    const { index, section, title, content, duration, video_link, document_link, free_preview } = req.body.lesson;
 
     const course = await Course.findById(courseId);
     const lessonIndexes = course.lessons.filter(lesson => lesson.section === section).map(lesson => lesson.index);
@@ -1421,16 +1519,17 @@ const updateLesson = async (req, res) => {
     // check if any changes
     const [_course] = await Course.aggregate([{ $match: { _id: courseId } }, { $limit: 1 }]);
     const lessonInfo = course.lessons.find(_ => _._id === lessonId);
-    console.log('lessonInfo: ', lessonInfo);
-    console.log('req.body.lesson: ', req.body.lesson);
 
     let flag = false;
-    Object.keys(req.body.lesson).filter(_ => Object.keys(lessonInfo).includes(_)).forEach(key => {
+    let array = [];
+    Object.keys(req.body.lesson).forEach(key => {
+      array.push({ old: JSON.stringify(lessonInfo[`${key}`]), new: JSON.stringify(req.body.lesson[`${key}`]) })
       if (JSON.stringify(req.body.lesson[`${key}`]) !== JSON.stringify(lessonInfo[`${key}`])) {
         flag = true;
         return;
       }
     });
+    console.log(chalk.blue('array: '), array)
     if (!flag)
       return res.status(400).json({
         success: false,
@@ -1438,20 +1537,24 @@ const updateLesson = async (req, res) => {
         data: null
       });
 
+    // update params
+    let params = {};
+    if (title) params['lessons.$.title'] = title;
+    if (title) params['lessons.$.slug'] = slugify(title);
+    if (content) params['lessons.$.content'] = content;
+    if (duration) params['lessons.$.duration'] = duration;
+    if (video_link) params['lessons.$.video_link'] = video_link;
+    if (document_link) params['lessons.$.document_link'] = document_link;
+    if (free_preview) params['lessons.$.free_preview'] = free_preview;
+    if (index) params['lessons.$.index'] = index;
+    if (section) params['lessons.$.section'] = section;
+    console.log(chalk.blue('params: '), params)
+
     // update changes
     const updated = await Course.findOneAndUpdate(
       { "lessons._id": lessonId },
       {
-        $set: {
-          "lessons.$.title": title,
-          "lessons.$.slug": slugify(title),
-          "lessons.$.content": content,
-          "lessons.$.duration": duration,
-          "lessons.$.video_link": video_link,
-          "lessons.$.free_preview": free_preview,
-          "lessons.$.index": index,
-          "lessons.$.section": section
-        },
+        $set: params,
         status: 'unpublic'
       },
       { new: true }
@@ -1483,7 +1586,7 @@ const updateLesson = async (req, res) => {
     console.log(error);
     return res.status(400).json({
       success: false,
-      message: 'Delete lesson fail, try again!',
+      message: 'Update lesson fail, try again!',
       data: null
     })
   }
@@ -2019,6 +2122,8 @@ export {
   uploadImageController,
   removeImageController,
   removeListImageController,
+  uploadPdfController,
+  removePdfController,
   getPublishedCourses,
   getPublicCourseBySlug,
   getPublicCourseById,
