@@ -4,9 +4,86 @@ import Course from '../models/course';
 import Stripe from 'stripe';
 import lodash from 'lodash';
 import { exchangeCurrency } from '../../utils/exchangeCurrency';
+import { comparePassword, hashPassword } from '../../utils/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const SUFFIX_STRIPE_USD = 100;
+
+const getBasicInformation = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Get user information successfully',
+      data: user,
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Get user information fail, try again!',
+      data: null,
+    })
+  }
+}
+
+const editBasicInformation = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    if (req.body.name) user.name = req.body.name;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update user information successfully',
+      data: user,
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Update user information fail, try again!',
+      data: null,
+    })
+  }
+}
+
+const editPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    const user = await User.findById(req.user._id).select('-password -passwordResetCode');
+
+    // hash password
+    const hashedPass = await hashPassword(password);
+
+    // save
+    user.password = hashedPass;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Update user password successfully',
+      data: user,
+    })
+  }
+  catch (error) {
+    console.log(chalk.red('error: '));
+    console.log(error);
+    return res.status(400).json({
+      success: false,
+      message: 'Change password fail, try again!',
+      data: null,
+    })
+  }
+}
 
 const checkEnrollment = async (req, res) => {
   try {
@@ -313,7 +390,7 @@ const getEnrolledCourses = async (req, res) => {
                   },
                   {
                     $project: {
-                      name: 1, picture: 1, 
+                      name: 1, picture: 1, instructor_information: 1
                     }
                   }
                 ],
@@ -442,7 +519,8 @@ const getEnrolledCourseBySlug = async (req, res) => {
             },
             {
               $project: {
-                name: 1
+                name: 1,
+                instructor_information: 1
               }
             }
           ],
@@ -652,6 +730,9 @@ const getAllUsers = async (req, res) => {
 }
 
 export {
+  getBasicInformation,
+  editBasicInformation,
+  editPassword,
   freeEnrollmentController,
   paidEnrollmentController,
   checkEnrollment,
