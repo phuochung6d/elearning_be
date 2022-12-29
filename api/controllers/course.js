@@ -117,14 +117,19 @@ const isChanged = async (req, res, next) => {
     ]);
 
     let flag = false;
-    // let changedData = [];
     Object.keys(req.body).forEach(async _ => {
+      let latest = '', old = '', old_official_data = '';
+      if (req.body[`${_}`]) latest = JSON.stringify(req.body[`${_}`]);
+      if (course[`${_}`]) old = JSON.stringify(course[`${_}`]);
+      if (course?.official_data) {
+        if (course?.official_data[`${_}`]) old_official_data = JSON.stringify(course?.official_data[`${_}`]);
+      }
+
       if (
-        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course.official_data[`${_}`])
+        latest !== old_official_data
         ||
-        JSON.stringify(req.body[`${_}`]) !== JSON.stringify(course[`${_}`])
+        latest !== old
       ) {
-        // changedData.push({ field: `${_}`, oldData: course[`${_}`], newData: req.body[`${_}`] });
         flag = true;
         return;
       }
@@ -439,7 +444,7 @@ const getPublishedCourses = async (req, res) => {
               }
             },
             {
-              $project: { name: 1 }
+              $project: { name: 1, instructor_information: 1 }
             }
           ],
           as: 'instructorInfo'
@@ -578,7 +583,7 @@ const getPublicCourseBySlug = async (req, res) => {
               }
             },
             {
-              $project: { name: 1, role: 1 }
+              $project: { name: 1, role: 1, instructor_information: 1 }
             }
           ],
           as: 'instructorInfo'
@@ -672,7 +677,7 @@ const getPublicCourseById = async (req, res) => {
               }
             },
             {
-              $project: { name: 1, role: 1 }
+              $project: { name: 1, role: 1, instructor_information: 1 }
             }
           ],
           as: 'instructorInfo'
@@ -868,8 +873,10 @@ const updateCourse = async (req, res) => {
       .forEach(item => {
         if (Object.keys(req.body).includes(item)) {
           value[`${item}`] = req.body[`${item}`];
-          if (JSON.stringify(req.body[`${item}`]) !== JSON.stringify(course.official_data[`${item}`]))
-            flag = true;
+          if (course?.official_data) {
+            if (JSON.stringify(req.body[`${item}`]) !== JSON.stringify(course.official_data[`${item}`]))
+              flag = true;
+          }
         }
       });
 
