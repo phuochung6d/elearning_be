@@ -4,6 +4,7 @@ import Course from '../models/course';
 import Stripe from 'stripe';
 import lodash from 'lodash';
 import { exchangeCurrency } from '../../utils/exchangeCurrency';
+import { discount30 } from '../../utils/discount30';
 import { comparePassword, hashPassword } from '../../utils/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -226,13 +227,29 @@ const paidEnrollmentController = async (req, res) => {
         data: null
       });
 
+    const instructorData = await User.findById(course.instructor._id);
+
     const exchangeRate = await exchangeCurrency();
     console.log('exchangeRate: ', exchangeRate);
 
-    const [priceVND, priceUSD] = [course.price, (course.price / exchangeRate).toFixed(2)];
+    // const [priceVND, priceUSD] = [course.price, (course.price / exchangeRate).toFixed(2)];
+    let [priceVND, priceUSD] = [0, 0];
+    if (instructorData.instructor_information.plan_type === 'premium') {
+      priceVND = parseInt(discount30(course.price)).toFixed(0);
+      priceUSD = (priceVND / exchangeRate).toFixed(2)
+    } else {
+      priceVND = course.price;
+      priceUSD = (priceVND / exchangeRate).toFixed(2);
+    }
 
-    // 30% of application fee
-    const fee = (priceUSD * 30) / 100;
+    // 40% of application fee
+    // const fee = (priceUSD * 40) / 100;
+    let fee = 0;
+    if (instructorData.instructor_information.plan_type === 'premium') {
+      fee = (priceUSD * 7) / 100;
+    } else {
+      fee = (priceUSD * 40) / 100;
+    }
 
     // stripe session
       const success_url =
@@ -252,7 +269,7 @@ const paidEnrollmentController = async (req, res) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: course.name,
+              name: `${course.name} | ${priceVND} VND | $${priceUSD}`,
             },
             unit_amount: Math.round(priceUSD * SUFFIX_STRIPE_USD)
           },
