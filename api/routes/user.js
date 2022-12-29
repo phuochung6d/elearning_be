@@ -7,6 +7,9 @@ import {
   verifyRole,
 } from '../middlewares';
 import {
+  getBasicInformation,
+  editBasicInformation,
+  editPassword,
   freeEnrollmentController,
   paidEnrollmentController,
   checkEnrollment,
@@ -20,6 +23,11 @@ import {
 } from '../controllers/user';
 
 const router = express.Router();
+
+// get basic info
+router.get('/', requireSignin, getBasicInformation);
+router.put('/edit', requireSignin, editBasicInformation);
+router.put('/edit-password', requireSignin, editPassword);
 
 // check if have enrolled
 router.post('/check-enrollment/:courseId', requireSignin, checkEnrollment);
